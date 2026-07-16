@@ -473,14 +473,18 @@ async def api_verify(request: Request, x_openalex_key: Optional[str] = Header(de
     """Verify a single reference against OpenAlex. Returns existence, a field-by-
     field metadata comparison, and the abstract. No LLM, no auth required.
     Accepts any body shape an LLM might send — never rejects on shape or type."""
-    references, body_key = _normalize_batch(await _read_json(request))
+    payload = await _read_json(request)
+    references, body_key = _normalize_batch(payload)
     key = (x_openalex_key or body_key or "").strip() or None
     first = references[0] if references and isinstance(references[0], dict) else {}
     try:
         res = _safe_resolve(_coerce_ref(first, 1), key)
     except OpenAlexAuthError as exc:
         raise HTTPException(400, redact(str(exc), key))
-    return _verify_response(res)
+    resp = {**_verify_response(res), "api_version": API_VERSION}
+    if not references:
+        resp["hint"] = _shape_hint(payload)
+    return resp
 
 
 def _batch_item(idx: int, raw: Any, key: Optional[str]) -> dict:
@@ -493,13 +497,41 @@ def _batch_item(idx: int, raw: Any, key: Optional[str]) -> dict:
     return {"index": idx, **_verify_response(res)}
 
 
+# Included in every verify response so a pasted extension transcript shows
+# WHICH build answered — a count:0 from a stale deployment is otherwise
+# indistinguishable from a parsing failure on the current one.
+API_VERSION = "2026-07-16.6"
+
+
+def _shape_hint(payload: Any) -> str:
+    """Human/LLM-readable description of a request body no references could be
+    read from. Structure only — key names, types, sizes — NEVER values, which
+    could contain keys or document text."""
+    if payload is None:
+        desc = "empty"
+    elif isinstance(payload, str):
+        desc = f"an unparseable string of {len(payload)} characters"
+    elif isinstance(payload, dict):
+        desc = "a JSON object with keys " + str(sorted(str(k) for k in payload)[:10])
+    elif isinstance(payload, list):
+        desc = f"a JSON array of {len(payload)} items, none of which is a reference object"
+    else:
+        desc = f"of type {type(payload).__name__}"
+    return ("No references could be read from the request body, which was " + desc +
+            '. Expected {"references": [{"title": "...", "authors": [...], "year": ...}, ...]}. '
+            "If you are an assistant relaying this to a user: report this hint verbatim. "
+            "Check that the extension's endpoint URL points at the CURRENT deployment "
+            "(see /edugenai for the format and a test command).")
+
+
 @app.post("/api/verify_batch")
 async def api_verify_batch(request: Request, x_openalex_key: Optional[str] = Header(default=None)):
     """Verify many references in one call (preferred for a whole bibliography —
     one round trip). Accepts any body shape an LLM might send; malformed entries
     are reported per-reference, never failing the whole batch; lookups run in
     parallel to keep a big bibliography fast."""
-    references, body_key = _normalize_batch(await _read_json(request))
+    payload = await _read_json(request)
+    references, body_key = _normalize_batch(payload)
     if len(references) > 200:
         raise HTTPException(400, "Too many references in one request (max 200).")
     key = (x_openalex_key or body_key or "").strip() or None
@@ -509,7 +541,10 @@ async def api_verify_batch(request: Request, x_openalex_key: Optional[str] = Hea
             results = list(pool.map(lambda it: _batch_item(it[0], it[1], key), items))
     except OpenAlexAuthError as exc:
         raise HTTPException(400, redact(str(exc), key))
-    return {"count": len(results), "results": results}
+    resp: dict = {"count": len(results), "results": results, "api_version": API_VERSION}
+    if not results:
+        resp["hint"] = _shape_hint(payload)
+    return resp
 
 
 @app.get("/edugenai")

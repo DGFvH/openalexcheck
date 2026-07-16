@@ -174,10 +174,12 @@ it a hallucination."""
 SCHEMA = """{
   "name": "verify_references",
   "description": "Verify a list of bibliographic references against OpenAlex.
-    For each reference, returns whether the work exists (found / fuzzy /
-    not_found), a field-by-field comparison of the printed metadata (title,
-    authors, year, journal, DOI, volume, issue, pages) against the real record,
-    and the abstract of the matched work.",
+    Call this whenever the user says 'start', 'start the extension', 'start
+    the check', or wants to check, verify, or fact-check the citations or
+    references in a paper. For each reference, returns whether the work exists
+    (found / fuzzy / not_found), a field-by-field comparison of the printed
+    metadata (title, authors, year, journal, DOI, volume, issue, pages) against
+    the real record, and the abstract of the matched work.",
   "parameters": {
     "type": "object",
     "properties": {
@@ -299,7 +301,9 @@ def build():
     story.append(Paragraph("Short description", LABEL))
     story.append(code("Verifies a paper's references against OpenAlex: checks that each\n"
                        "work exists and that the printed title, authors, year, journal,\n"
-                       "DOI and pages match, and returns the abstract."))
+                       "DOI and pages match, and returns the abstract. Run it whenever\n"
+                       "the user says \"start\", \"start the extension\", \"check\", or asks\n"
+                       "to verify citations or references."))
     story.append(Paragraph("Detail description (paste verbatim — this is the assistant's "
                            "instruction)", LABEL))
     story.append(code(DETAIL))
@@ -330,6 +334,18 @@ def build():
                            "itself: if “start the extension” gets you a menu instead of a run, "
                            "re-paste the current Detail description from Step 2 into your "
                            "extension and submit again.", BODY))
+    story.append(Paragraph("Troubleshooting — count: 0", H2))
+    story.append(Paragraph("Every response carries an api_version field, and a response with "
+                           "zero results carries a hint field describing the body shape the "
+                           "server received (key names only, never content). Ask the assistant "
+                           "to show the raw output: no api_version means the extension calls an "
+                           "OLD deployment — fix the function URL (preview/branch URLs keep "
+                           "serving stale builds). A hint means the body shape was unreadable — "
+                           "send it to the maintainer. You can test the endpoint from a "
+                           "terminal: curl -s -X POST <host>/api/verify_batch -H \"Content-Type: "
+                           "application/json\" -d '{\"references\":[{\"title\":\"Attention is all "
+                           "you need\",\"year\":2017}]}' — a healthy deployment answers within "
+                           "seconds with count: 1 and a Verified result.", BODY))
 
     story.append(PageBreak())
     story.append(Paragraph("What the endpoint returns", H2))

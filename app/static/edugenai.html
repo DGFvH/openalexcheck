@@ -132,7 +132,7 @@
       <p><span class="field-label">Name</span></p>
       <div class="codewrap"><pre id="c-name">OpenAlex Citation Verifier</pre><button class="copy" data-for="c-name">Copy</button></div>
       <p><span class="field-label">Short description</span></p>
-      <div class="codewrap"><pre id="c-short">Verifies a paper's references against OpenAlex: checks that each work exists and that the printed title, authors, year, journal, DOI and pages match, and returns the abstract.</pre><button class="copy" data-for="c-short">Copy</button></div>
+      <div class="codewrap"><pre id="c-short">Verifies a paper's references against OpenAlex: checks that each work exists and that the printed title, authors, year, journal, DOI and pages match, and returns the abstract. Run it whenever the user says "start", "start the extension", "check", or asks to verify citations or references.</pre><button class="copy" data-for="c-short">Copy</button></div>
       <p><span class="field-label">Detail description</span> — this is the instruction EduGenAI's assistant follows. Paste it verbatim:</p>
       <div class="codewrap"><pre id="c-detail">Use this extension to fact-check the reference list of an uploaded paper.
 
@@ -187,7 +187,7 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
       <p><span class="field-label">Function definition (name, description, JSON parameters)</span></p>
       <div class="codewrap"><pre id="c-schema">{
   "name": "verify_references",
-  "description": "Call this whenever the user wants to check, verify, or fact-check the citations or references in a paper. Verifies a list of bibliographic references against OpenAlex. For each reference, returns whether the work exists (found / fuzzy / not_found), a field-by-field comparison of the printed metadata (title, authors, year, journal, DOI, volume, issue, pages) against the real record, and the abstract of the matched work.",
+  "description": "Call this whenever the user says 'start', 'start the extension', 'start the check', or wants to check, verify, or fact-check the citations or references in a paper. Verifies a list of bibliographic references against OpenAlex. For each reference, returns whether the work exists (found / fuzzy / not_found), a field-by-field comparison of the printed metadata (title, authors, year, journal, DOI, volume, issue, pages) against the real record, and the abstract of the matched work.",
   "parameters": {
     "type": "object",
     "properties": {
@@ -284,6 +284,18 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
   <p>…followed by a <em>Details</em> section for the flagged rows and a one-line summary count. The assistant does this conversion because the Detail description explicitly says the user must never see the raw JSON.</p>
   <div class="note"><strong>If you still see raw JSON in the chat:</strong> the Detail description probably wasn't saved with the extension (re-check Step 2), or the platform truncated it. Two fixes: (1) re-paste the full Detail description; (2) as a per-chat override, end your request with — <em>“Present the results as a severity-sorted table with flags and the metadata mismatches spelled out; do not show raw JSON.”</em> The endpoint's JSON also ships ready-made display fields (<code class="inline">badge</code>, <code class="inline">severity</code>, <code class="inline">priority</code>, <code class="inline">mismatched_fields</code>) precisely so the assistant only has to lay them out, not compute them.</div>
 
+  <h2>Troubleshooting — the extension returns <code class="inline">count: 0</code></h2>
+  <p>Every response now carries an <code class="inline">api_version</code> field, and any response with zero results carries a <code class="inline">hint</code> field describing what the server actually received. Ask the assistant to show the raw output and read those two fields:</p>
+  <ul>
+    <li><strong>No <code class="inline">api_version</code> in the response?</strong> The extension is calling an <em>old deployment</em>. Vercel preview URLs and old branch deployments keep serving stale builds forever — open the extension in the builder and make sure the function URL is exactly <code class="inline">https://www.phantocite.com/api/verify_batch</code> (or your current production host), not a preview/branch URL.</li>
+    <li><strong>A <code class="inline">hint</code> saying no references could be read?</strong> It describes the body shape that arrived (key names only, never content) — send that hint to the tool's maintainer, or adjust the function schema to match Step 4.</li>
+    <li><strong>"start" produces a menu instead of a run?</strong> Your extension still has an old Detail description — re-paste it from Step 2 (the saved copy never updates itself).</li>
+  </ul>
+  <p>To check the endpoint independently of EduGenAI, run this from any terminal — a healthy deployment answers in a couple of seconds with <code class="inline">count: 1</code> and a <code class="inline">Verified</code> result:</p>
+  <div class="codewrap"><pre id="c-curl">curl -s -X POST https://www.phantocite.com/api/verify_batch \
+  -H "Content-Type: application/json" \
+  -d '{"references":[{"title":"Attention is all you need","year":2017}]}'</pre><button class="copy" data-for="c-curl">Copy</button></div>
+
   <h2>What data passes through your server?</h2>
   <p>Because the extension calls <em>your</em> deployment, it helps to be precise about what actually travels there — and what does not.</p>
   <div class="card flow">
@@ -315,9 +327,11 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
     var origin = window.location.origin;
     if (!/^https?:\/\//.test(origin)) return;
     document.querySelectorAll("#host-token").forEach(function (el) { el.textContent = origin; });
-    ["c-url"].forEach(function (id) {
+    ["c-url", "c-curl"].forEach(function (id) {
       var el = document.getElementById(id);
-      if (el) el.textContent = el.textContent.replace("https://YOUR-DEPLOYMENT-HOST", origin);
+      if (el) el.textContent = el.textContent
+        .replace("https://YOUR-DEPLOYMENT-HOST", origin)
+        .replace("https://www.phantocite.com", origin);
     });
   })();
   document.querySelectorAll(".copy").forEach(function (btn) {

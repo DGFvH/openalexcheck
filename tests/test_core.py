@@ -431,6 +431,17 @@ def test_verify_tolerates_any_request_shape(monkeypatch):
                     headers={"Content-Type": "application/x-www-form-urlencoded"})
     assert r.status_code == 200 and r.json()["count"] == 2
 
+    # Responses are self-diagnosing: every response carries api_version, and a
+    # zero-result response carries a hint describing the received shape by its
+    # KEY NAMES only — never the values (which could be keys/document text).
+    r = post("/api/verify_batch", '{"references":[{"title":"A"}]}')
+    assert r.json()["api_version"] == main.API_VERSION and "hint" not in r.json()
+    r = post("/api/verify_batch", '{"query":"SECRETVALUE","tags":["SECRETVALUE"]}')
+    d = r.json()
+    assert d["count"] == 0 and "api_version" in d
+    assert "query" in d["hint"] and "tags" in d["hint"]     # key names shown
+    assert "SECRETVALUE" not in d["hint"]                   # values never echoed
+
 
 def test_parse_json_handles_braces_inside_strings():
     from app.llm import _parse_json
