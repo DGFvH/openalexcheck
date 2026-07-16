@@ -144,6 +144,8 @@ async def _run_stream(*, llm, text, openalex_key, check_hallucination,
                 item = {
                     "reference": ref, "status": res["status"], "work": res["work"],
                     "candidates": res["candidates"], "notes": safe_notes(res["notes"]),
+                    "field_check": res.get("field_check", []),
+                    "field_mismatch_count": res.get("field_mismatch_count", 0),
                     "misquote": None,
                 }
                 emit({"type": "result", "result": item})

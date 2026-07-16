@@ -32,10 +32,14 @@ Return JSON with exactly this shape:
       "raw": "the reference entry exactly as it appears",
       "title": "the work's title, or null if you cannot identify one",
       "first_author_surname": "surname of the first author, or null",
-      "authors": ["Full Name", "..."],
+      "authors": ["Surname, F.", "..."],
       "year": 2020,
       "doi": "10.xxxx/yyyy or null (only if printed in the reference)",
       "container": "journal or book name, or null",
+      "volume": "volume string or null",
+      "issue": "issue string or null",
+      "pages": "page range exactly as printed, e.g. '123-145' or 'e0234', or null",
+      "et_al": false,
       "contexts": ["citing passage 1", "citing passage 2"]
     }
   ]
@@ -43,10 +47,13 @@ Return JSON with exactly this shape:
 
 Rules:
 - Include EVERY reference in the bibliography, even if it is never cited in the body.
+- "authors" must list EVERY author name printed in the reference, in order. Do not
+  drop any. If the reference itself abbreviates the list with "et al.", list the
+  authors that ARE printed and set "et_al": true.
 - "contexts" must be verbatim passages of roughly 2-4 sentences each; at most 3 per reference.
 - If a reference is never cited in the body, use an empty list for "contexts".
-- "year" must be an integer or null. "doi" must only be included if it is
-  literally present in the document — never invent one.
+- "year" must be an integer or null. "doi", "pages", "volume", "issue" must only be
+  included if literally present in the document — never invent them.
 
 PAPER TEXT:
 <<<
@@ -80,7 +87,8 @@ Return JSON with exactly this shape:
       "verdict": "match",
       "explanation": "one or two sentences explaining the judgement",
       "paper_topic": "3-8 word summary of what the abstract is about",
-      "student_usage": "3-8 word summary of how the student uses it"
+      "student_usage": "3-8 word summary of how the student uses it",
+      "abstract_summary": "one or two sentences summarising what THIS paper is about, focused on its topic and main finding (independent of the student)"
     }
   ]
 }
@@ -104,10 +112,14 @@ def extract_references(llm: LLMClient, text: str, max_tokens: int = 16000) -> li
             "raw": (ref.get("raw") or "").strip(),
             "title": (ref.get("title") or None),
             "first_author_surname": ref.get("first_author_surname"),
-            "authors": ref.get("authors") or [],
+            "authors": [a for a in (ref.get("authors") or []) if isinstance(a, str) and a.strip()],
             "year": _to_int(ref.get("year")),
             "doi": ref.get("doi") or None,
             "container": ref.get("container"),
+            "volume": _clean_str(ref.get("volume")),
+            "issue": _clean_str(ref.get("issue")),
+            "pages": _clean_str(ref.get("pages")),
+            "et_al": bool(ref.get("et_al")),
             "contexts": contexts[:MAX_CONTEXTS_PER_REF],
         })
     return cleaned
@@ -163,6 +175,7 @@ def compare_contexts(llm: LLMClient, items: list[dict], max_tokens: int = 8000) 
                     "explanation": r.get("explanation") or "",
                     "paper_topic": r.get("paper_topic"),
                     "student_usage": r.get("student_usage"),
+                    "abstract_summary": r.get("abstract_summary"),
                 })
             else:
                 out.append({"id": item["id"], "verdict": "unclear",
@@ -175,3 +188,10 @@ def _to_int(value) -> Optional[int]:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _clean_str(value) -> Optional[str]:
+    if value is None:
+        return None
+    s = str(value).strip()
+    return s or None

@@ -123,3 +123,48 @@ def test_get_retries_then_raises(monkeypatch):
     with pytest.raises(openalex.OpenAlexLookupError):
         openalex._get(C(), "/works", attempts=3)
     assert calls["n"] == 3
+
+
+def test_compare_authors_detects_wrong_author():
+    from app.fieldcheck import compare_authors
+    ref = {"authors": ["Smith, J.", "Jones, B."], "et_al": False,
+           "first_author_surname": "Smith"}
+    r = compare_authors(ref, ["John Jumper", "Richard Evans", "Alex Pritzel"])
+    assert r["status"] == "mismatch"
+    assert "Smith" in r["detail"]
+
+
+def test_compare_authors_matches_surnames_across_formats():
+    from app.fieldcheck import compare_authors
+    ref = {"authors": ["Jumper, J.", "Evans, R."], "et_al": True}
+    r = compare_authors(ref, ["John Jumper", "Richard Evans", "Alex Pritzel"])
+    assert r["status"] == "match"
+
+
+def test_compare_fields_flags_year_and_pages():
+    from app.fieldcheck import compare_fields, field_mismatches, field_severity
+    ref = {"title": "A study of things", "authors": ["Doe, J."], "et_al": True,
+           "year": 2019, "doi": None, "container": "Journal of Things",
+           "volume": "5", "issue": None, "pages": "10-20"}
+    work = {"title": "A study of things", "authors_full": ["Jane Doe"],
+            "year": 2021, "doi": None, "venue": "Journal of Things",
+            "volume": "5", "issue": None, "pages": "10-20"}
+    fields = compare_fields(ref, work)
+    mism = {f["field"] for f in field_mismatches(fields)}
+    assert "year" in mism
+    assert "pages" not in mism   # pages actually match
+    assert field_severity(fields) >= 6  # year weight
+
+
+def test_pages_equal_shorthand():
+    from app.fieldcheck import _pages_equal
+    assert _pages_equal("123-145", "123-145")
+    assert not _pages_equal("100-110", "583-589")
+    assert _pages_equal("e0234", "e0234")
+
+
+def test_surname_extraction():
+    from app.fieldcheck import surname
+    assert surname("Smith, John A.") == "smith"
+    assert surname("John A. Smith") == "smith"
+    assert surname("") == ""

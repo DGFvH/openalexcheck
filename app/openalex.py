@@ -83,13 +83,24 @@ def summarize_work(work: dict) -> dict:
         if a.get("author", {}).get("display_name")
     ]
     source = ((work.get("primary_location") or {}).get("source") or {})
+    biblio = work.get("biblio") or {}
+    first_page = biblio.get("first_page") or None
+    last_page = biblio.get("last_page") or None
+    if first_page and last_page and first_page != last_page:
+        pages = f"{first_page}-{last_page}"
+    else:
+        pages = first_page or last_page or None
     return {
         "openalex_id": work.get("id"),
         "doi": clean_doi(work.get("doi") or "") or None,
         "title": work.get("title") or work.get("display_name"),
         "year": work.get("publication_year"),
-        "authors": authors[:6],
+        "authors": authors[:6],       # for compact display
+        "authors_full": authors,      # full list, for author verification
         "venue": source.get("display_name"),
+        "volume": biblio.get("volume") or None,
+        "issue": biblio.get("issue") or None,
+        "pages": pages,
         "cited_by_count": work.get("cited_by_count"),
         "url": work.get("doi") or work.get("id"),
         "abstract": reconstruct_abstract(work.get("abstract_inverted_index")),
@@ -172,10 +183,26 @@ def score_candidate(ref: dict, work_summary: dict) -> float:
     return score
 
 
+def _found(ref: dict, work: dict, notes: list[str]) -> dict:
+    """Build a 'found' result, attaching the deterministic field-level check
+    (title/authors/year/journal/DOI/volume/issue/pages)."""
+    from .fieldcheck import compare_fields, field_mismatches
+
+    fields = compare_fields(ref, work)
+    mism = field_mismatches(fields)
+    if mism:
+        labels = ", ".join(f["field"] for f in mism)
+        notes = notes + [f"Metadata mismatch on: {labels}. The work exists but the citation details differ."]
+    return {"status": "found", "work": work, "candidates": [], "notes": notes,
+            "field_check": fields, "field_mismatch_count": len(mism)}
+
+
 def resolve_reference(ref: dict, api_key: Optional[str] = None) -> dict:
     """Resolve one extracted reference against OpenAlex.
 
-    Returns {"status": "found"|"fuzzy"|"not_found", "work": ..., "candidates": [...], "notes": [...]}
+    Returns {"status": "found"|"fuzzy"|"not_found"|"lookup_failed", "work": ...,
+             "candidates": [...], "notes": [...], and for 'found':
+             "field_check": [...], "field_mismatch_count": N}
     """
     notes: list[str] = []
     candidates: list[dict] = []
@@ -195,7 +222,7 @@ def resolve_reference(ref: dict, api_key: Optional[str] = None) -> dict:
                 doi_work = summarize_work(raw)
                 sim = title_similarity(ref.get("title") or "", doi_work["title"] or "")
                 if sim >= 0.75 or not ref.get("title"):
-                    return {"status": "found", "work": doi_work, "candidates": [], "notes": notes}
+                    return _found(ref, doi_work, notes)
                 notes.append(
                     "The DOI in the reference resolves to a work with a different title "
                     f"(similarity {sim:.2f}). Possible fuzzy merge: correct DOI, wrong title (or vice versa)."
@@ -224,8 +251,12 @@ def resolve_reference(ref: dict, api_key: Optional[str] = None) -> dict:
             if scored:
                 best_score, best = scored[0]
                 best_sim = title_similarity(title, best["title"] or "")
-                if best_sim >= FOUND_THRESHOLD and best_score >= FOUND_THRESHOLD and not candidates:
-                    return {"status": "found", "work": best, "candidates": [], "notes": notes}
+                # A strong TITLE match means it is the same work — treat it as
+                # found and let the field check report any wrong author/year/etc.
+                # (don't let a wrong year or author demote it to 'fuzzy', since
+                # those discrepancies are precisely what we want to surface).
+                if best_sim >= FOUND_THRESHOLD and not candidates:
+                    return _found(ref, best, notes)
                 for sc, summary in scored[:4]:
                     if title_similarity(title, summary["title"] or "") >= FUZZY_THRESHOLD or sc >= FUZZY_THRESHOLD:
                         candidates.append({**summary, "match_reason": f"Title search (score {sc:.2f})"})

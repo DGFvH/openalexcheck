@@ -63,7 +63,26 @@
   .cand { border-top: 1px dashed var(--border); margin-top: .7rem; padding-top: .7rem; font-size: .9rem; }
   .cand button { font-family: system-ui, sans-serif; font-size: .78rem; padding: .3rem .8rem; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; cursor: pointer; margin-top: .35rem; }
   .cand button:hover { background: var(--accent); color: #fff; }
-  .summary { font-family: system-ui, sans-serif; font-size: .9rem; margin-top: 1rem; display: flex; gap: 1.4rem; flex-wrap: wrap; }
+  .summary-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; }
+  .summary { font-family: system-ui, sans-serif; font-size: .9rem; display: flex; gap: 1.4rem; flex-wrap: wrap; }
+  .downloads { display: flex; gap: .4rem; font-family: system-ui, sans-serif; }
+  .downloads button { font-size: .78rem; padding: .35rem .7rem; border: 1px solid var(--border); background: #fff; color: var(--ink); border-radius: 6px; cursor: pointer; }
+  .downloads button:hover { border-color: var(--accent); color: var(--accent); }
+  .sev { display: inline-block; margin-left: .5rem; font-family: system-ui, sans-serif; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: .1rem .45rem; border-radius: 4px; vertical-align: middle; }
+  .sev.high { background: #f6dcd8; color: var(--bad); } .sev.med { background: #f6ecd0; color: #8a5a12; } .sev.low { background: #dfeee8; color: var(--ok); }
+  .fields { width: 100%; border-collapse: collapse; font-family: system-ui, sans-serif; font-size: .8rem; margin-top: .6rem; }
+  .fields th { text-align: left; color: var(--muted); font-weight: 600; padding: .2rem .5rem .2rem 0; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
+  .fields td { padding: .25rem .5rem .25rem 0; border-top: 1px solid var(--border); vertical-align: top; }
+  .fields td.f-status { white-space: nowrap; }
+  .fields .fs-match { color: var(--ok); } .fields .fs-mismatch { color: var(--bad); font-weight: 600; } .fields .fs-unverifiable { color: var(--info); }
+  .fields tr.row-mismatch td { background: #fbf1ef; }
+  .field-note { font-family: system-ui, sans-serif; font-size: .82rem; margin-top: .5rem; }
+  .field-note.bad { color: var(--bad); } .field-note.ok { color: var(--ok); }
+  details.abstract { margin-top: .5rem; font-size: .85rem; }
+  details.abstract summary { cursor: pointer; font-family: system-ui, sans-serif; font-size: .8rem; color: var(--accent); }
+  details.abstract p { margin: .5rem 0 0; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: .6rem .8rem; }
+  .summary-line { font-family: system-ui, sans-serif; font-size: .85rem; margin-top: .5rem; }
+  .summary-line strong { color: var(--muted); font-weight: 600; }
   .error { color: var(--bad); font-family: system-ui, sans-serif; font-size: .9rem; margin-top: 1rem; white-space: pre-wrap; }
   .spinner { font-family: system-ui, sans-serif; color: var(--muted); margin-top: 1rem; }
   .progress-panel { margin-top: 1.3rem; font-family: system-ui, sans-serif; }
@@ -153,7 +172,14 @@
       <button id="tab-results" class="active">Results</button>
       <button id="tab-fuzzy">Fuzzy matches <span id="fuzzy-count"></span></button>
     </div>
-    <div class="summary" id="summary"></div>
+    <div class="summary-row">
+      <div class="summary" id="summary"></div>
+      <div class="downloads" id="downloads" style="display:none">
+        <button data-fmt="csv">⬇ CSV</button>
+        <button data-fmt="md">⬇ Markdown</button>
+        <button data-fmt="html">⬇ HTML</button>
+      </div>
+    </div>
     <div id="screen-results"></div>
     <div id="screen-fuzzy" class="hidden"></div>
   </div>
@@ -211,6 +237,8 @@ $("provider").addEventListener("change", populateModels);
 $("model_select").addEventListener("change", onModelChange);
 $("tab-results").addEventListener("click", () => switchTab("results"));
 $("tab-fuzzy").addEventListener("click", () => switchTab("fuzzy"));
+$("downloads").querySelectorAll("button").forEach(b =>
+  b.addEventListener("click", () => downloadResults(b.dataset.fmt)));
 populateModels();
 
 function switchTab(name) {
@@ -374,14 +402,19 @@ function finalize() {
   FINALIZED = true;
   $("progress-status").textContent = "Done.";
   $("progress-bar").style.width = "100%";
-  // Any still-pending misquote slots (found refs with no verdict) get their
-  // final rendering, and the fuzzy screen is built now that all refs are in.
-  DATA.results.forEach(patchMisquote);
+  // Re-render the results screen sorted by severity (worst problems first),
+  // now that every reference — with field checks and misquote verdicts — is in.
+  const ordered = DATA.results.slice().sort((a, b) =>
+    severity(b) - severity(a) || a.reference.id - b.reference.id);
+  $("screen-results").innerHTML = ordered.map(renderResult).join("") ||
+    "<p class='meta'>No references found.</p>";
+  for (const k in CARDS) delete CARDS[k];
   const fuzzies = DATA.results.filter(r => r.status === "fuzzy");
   $("screen-fuzzy").innerHTML = fuzzies.map(renderFuzzy).join("") ||
     "<p class='meta' style='margin-top:1rem'>No fuzzy matches — every reference either resolved cleanly or was not found at all.</p>";
   attachFuzzyHandlers();
   updateSummary();
+  $("downloads").style.display = DATA.results.length ? "flex" : "none";
 }
 
 function showError(msg) {
@@ -394,21 +427,90 @@ function esc(s) {
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// --- severity (rank by likelihood/severity of a citation problem) ---------
+const FIELD_WEIGHT = { authors: 9, doi: 8, title: 8, year: 6, pages: 4, journal: 4, volume: 3, issue: 2 };
+
+function severity(r) {
+  if (r.status === "not_found") return 100;
+  let s = 0;
+  if (r.status === "fuzzy") s = 60;
+  else if (r.status === "lookup_failed") s = 35;
+  else if (r.status === "found") {
+    const mism = (r.field_check || []).filter(f => f.status === "mismatch");
+    const maxW = mism.reduce((m, f) => Math.max(m, FIELD_WEIGHT[f.field] || 3), 0);
+    // authors/doi/title mismatch → ~85; year → ~70; minor fields → ~50
+    if (maxW >= 8) s = 85; else if (maxW >= 6) s = 70; else if (maxW > 0) s = 50; else s = 8;
+  }
+  const v = r.misquote && r.misquote.verdict;
+  if (v === "mismatch") s = Math.max(s, 80);
+  else if (v === "likely_mismatch") s = Math.max(s, 55);
+  else if (v === "unclear") s = Math.max(s, 15);
+  return s;
+}
+
+function sevChip(r) {
+  const s = severity(r);
+  if (s >= 70) return `<span class="sev high">Review</span>`;
+  if (s >= 45) return `<span class="sev med">Check</span>`;
+  return "";
+}
+
 function refHeader(r) {
   const ref = r.reference;
-  return `<span class="badge ${r.status}">${STATUS_LABEL[r.status]}</span>
+  return `<span class="badge ${r.status}">${STATUS_LABEL[r.status]}</span>${sevChip(r)}
     <div class="raw">${esc(ref.raw || ref.title || "(unlabelled reference)")}</div>`;
 }
 
+const FIELD_LABEL = { title: "Title", authors: "Authors", year: "Year", doi: "DOI",
+  journal: "Journal", volume: "Volume", issue: "Issue", pages: "Pages" };
+
+function renderFieldCheck(r) {
+  const fields = r.field_check || [];
+  if (r.status !== "found" || !fields.length) return "";
+  const mism = fields.filter(f => f.status === "mismatch");
+  const head = mism.length
+    ? `<div class="field-note bad">⚠ Metadata mismatch on ${mism.map(f => FIELD_LABEL[f.field] || f.field).join(", ")} — the work exists, but these printed details differ from the OpenAlex record.</div>`
+    : `<div class="field-note ok">✓ Title, authors, year, and other printed details match the OpenAlex record.</div>`;
+  const rows = fields.map(f => `
+    <tr class="${f.status === "mismatch" ? "row-mismatch" : ""}">
+      <td>${FIELD_LABEL[f.field] || f.field}</td>
+      <td class="f-status fs-${f.status}">${f.status}</td>
+      <td>${esc(f.reference_value ?? "—")}</td>
+      <td>${esc(f.openalex_value ?? "—")}</td>
+    </tr>`).join("");
+  return head + `<details class="abstract"${mism.length ? " open" : ""}>
+    <summary>Field-by-field comparison (${fields.length})</summary>
+    <table class="fields"><thead><tr><th>Field</th><th>Status</th><th>In reference</th><th>In OpenAlex</th></tr></thead>
+    <tbody>${rows}</tbody></table></details>`;
+}
+
+function renderAbstract(r) {
+  if (r.status !== "found" || !r.work) return "";
+  const summary = r.misquote && r.misquote.abstract_summary;
+  const abstract = r.work.abstract;
+  let html = "";
+  if (summary) html += `<div class="summary-line"><strong>What this paper is about:</strong> ${esc(summary)}</div>`;
+  if (abstract) {
+    html += `<details class="abstract"><summary>OpenAlex abstract</summary><p>${esc(abstract)}</p></details>`;
+  } else if (r.status === "found") {
+    html += `<div class="meta">OpenAlex has no abstract for this work.</div>`;
+  }
+  return html;
+}
+
 function renderResult(r) {
-  const notes = (r.notes || []).map(n => `<div class="note">⚠ ${esc(n)}</div>`).join("");
+  const notes = (r.notes || []).filter(n => !/Metadata mismatch/.test(n))
+    .map(n => `<div class="note">⚠ ${esc(n)}</div>`).join("");
   let workLine = "";
   if (r.work) {
     workLine = `<div class="meta">Matched: <a href="${esc(r.work.url)}" target="_blank" rel="noopener">${esc(r.work.title)}</a>
       (${esc(r.work.year ?? "?")}) — ${esc((r.work.authors || []).slice(0, 3).join(", "))}${r.work.venue ? " · " + esc(r.work.venue) : ""}</div>`;
   }
   return `<div class="ref" id="ref-${r.reference.id}">
-    ${refHeader(r)} ${workLine} ${r.status === "fuzzy" ? '<div class="meta">See the “Fuzzy matches” screen to pick the right work.</div>' : notes}
+    ${refHeader(r)} ${workLine}
+    ${r.status === "fuzzy" ? '<div class="meta">See the “Fuzzy matches” screen to pick the right work.</div>' : notes}
+    ${renderFieldCheck(r)}
+    ${renderAbstract(r)}
     ${renderMisquote(r)}
   </div>`;
 }
@@ -425,19 +527,17 @@ function renderMisquote(r) {
       return target + `<div class="meta">Misquote check unavailable for this reference.</div></div>`;
     return target + `</div>`;
   }
-  const abstract = r.work && r.work.abstract ? r.work.abstract : null;
-  return target + misquoteBlock(m, contexts, abstract) + `</div>`;
+  return target + misquoteBlock(m, contexts) + `</div>`;
 }
 
-function misquoteBlock(m, contexts, abstract) {
+function misquoteBlock(m, contexts) {
   let html = `<div class="verdict"><span class="badge ${m.verdict}">${VERDICT_LABEL[m.verdict]}</span> ${esc(m.explanation || "")}</div>`;
   if (m.paper_topic || m.student_usage) {
     html += `<div class="meta">Paper is about: <strong>${esc(m.paper_topic || "?")}</strong> · Student uses it as: <strong>${esc(m.student_usage || "?")}</strong></div>`;
   }
-  html += `<div class="compare">
-    <div class="box"><h4>Student's citation context</h4>${contexts.length ? contexts.map(c => `<p>“${esc(c)}”</p>`).join("") : "<p class='meta'>Not cited in the body text.</p>"}</div>
-    <div class="box"><h4>OpenAlex abstract</h4><p>${abstract ? esc(abstract.slice(0, 1200)) + (abstract.length > 1200 ? "…" : "") : "<span class='meta'>No abstract available.</span>"}</p></div>
-  </div>`;
+  html += `<div class="box" style="margin-top:.5rem"><h4>Student's citation context</h4>${
+    contexts.length ? contexts.map(c => `<p>“${esc(c)}”</p>`).join("") : "<p class='meta'>Not cited in the body text.</p>"
+  }</div>`;
   return html;
 }
 
@@ -481,7 +581,7 @@ function attachFuzzyHandlers() {
         const m = body.results[0];
         $(`fuzzy-mq-${refId}`).innerHTML =
           `<div class="meta" style="margin-top:.6rem"><strong>Misquote check against “${esc(cand.title)}”:</strong></div>` +
-          misquoteBlock(m, r.reference.contexts, cand.abstract);
+          misquoteBlock(m, r.reference.contexts);
       } catch (err) {
         $(`fuzzy-mq-${refId}`).innerHTML = `<div class="error">${esc(err.message)}</div>`;
       } finally {
@@ -489,6 +589,78 @@ function attachFuzzyHandlers() {
       }
     });
   });
+}
+
+// --- downloads (client-side; no server round-trip, no LLM) ----------------
+// One row per reference with the verification outcome. Built entirely in the
+// browser from data already on the page — the efficient choice for a table.
+function tableRows() {
+  const ordered = DATA.results.slice().sort((a, b) =>
+    severity(b) - severity(a) || a.reference.id - b.reference.id);
+  return ordered.map(r => {
+    const w = r.work || {};
+    const fields = r.field_check || [];
+    const fget = name => fields.find(f => f.field === name) || {};
+    const mism = fields.filter(f => f.status === "mismatch").map(f => FIELD_LABEL[f.field] || f.field);
+    const m = r.misquote || {};
+    return {
+      "#": r.reference.id,
+      "Status": STATUS_LABEL[r.status],
+      "Priority": severity(r) >= 70 ? "Review" : (severity(r) >= 45 ? "Check" : ""),
+      "Reference (as printed)": r.reference.raw || r.reference.title || "",
+      "Matched title": w.title || "",
+      "Field mismatches": mism.join("; "),
+      "Authors (OpenAlex)": (w.authors || []).join(", "),
+      "Year ref / OA": `${r.reference.year ?? ""} / ${w.year ?? ""}`,
+      "DOI ref / OA": `${r.reference.doi ?? ""} / ${w.doi ?? ""}`,
+      "Journal ref / OA": `${r.reference.container ?? ""} / ${w.venue ?? ""}`,
+      "Pages ref / OA": `${r.reference.pages ?? ""} / ${w.pages ?? ""}`,
+      "Misquote verdict": m.verdict ? VERDICT_LABEL[m.verdict] : "",
+      "Paper topic": m.abstract_summary || m.paper_topic || "",
+      "Student usage": m.student_usage || "",
+      "Notes": (r.notes || []).join(" | "),
+      "OpenAlex URL": w.url || "",
+    };
+  });
+}
+
+function downloadResults(fmt) {
+  const rows = tableRows();
+  if (!rows.length) return;
+  const cols = Object.keys(rows[0]);
+  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  if (fmt === "csv") {
+    const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const csv = "﻿" + [cols.map(q).join(","),
+      ...rows.map(r => cols.map(c => q(r[c])).join(","))].join("\r\n");
+    saveBlob(csv, `citation-check-${stamp}.csv`, "text/csv");
+  } else if (fmt === "md") {
+    const esc = v => String(v ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ");
+    const md = [`| ${cols.join(" | ")} |`, `| ${cols.map(() => "---").join(" | ")} |`,
+      ...rows.map(r => `| ${cols.map(c => esc(r[c])).join(" | ")} |`)].join("\n");
+    saveBlob(md, `citation-check-${stamp}.md`, "text/markdown");
+  } else {
+    const esc = s => String(s ?? "").replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+    const th = cols.map(c => `<th>${esc(c)}</th>`).join("");
+    const trs = rows.map(r =>
+      `<tr class="${r.Priority === "Review" ? "hi" : ""}">${cols.map(c => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("");
+    const html = `<!doctype html><meta charset="utf-8"><title>Citation check ${stamp}</title>
+<style>body{font:14px system-ui,sans-serif;margin:2rem}table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #ccc;padding:4px 8px;text-align:left;vertical-align:top;font-size:12px}
+th{background:#f0ede6}tr.hi td{background:#fbeeec}</style>
+<h1>Citation check</h1><p>${rows.length} references · generated ${stamp}</p>
+<table><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
+    saveBlob(html, `citation-check-${stamp}.html`, "text/html");
+  }
+}
+
+function saveBlob(text, filename, mime) {
+  const blob = new Blob([text], { type: mime + ";charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 </script>
 </body>
