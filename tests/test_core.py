@@ -212,3 +212,34 @@ def test_verify_batch_cap():
     client = TestClient(main.app)
     r = client.post("/api/verify_batch", json={"references": [{"title": "x"}] * 201})
     assert r.status_code == 400
+
+
+def test_parse_json_handles_braces_inside_strings():
+    from app.llm import _parse_json
+    # A citation context containing math braces must not break brace matching.
+    txt = 'Sure:\n{"references":[{"id":1,"title":"On {a,b}","note":"f(x)={1}/{2}"}]} thanks'
+    d = _parse_json(txt)
+    assert d["references"][0]["title"] == "On {a,b}"
+
+
+def test_complete_json_truncation_message(monkeypatch):
+    from app.llm import LLMClient, LLMError
+    c = LLMClient("anthropic", "sk-test")
+    # Simulate a provider reply that hit the token ceiling and is unparseable.
+    monkeypatch.setattr(c, "_complete", lambda *a, **k: ('{"references":[{"id":1', True))
+    try:
+        c.complete_json("s", "u", max_tokens=100)
+        assert False, "should raise"
+    except LLMError as e:
+        assert "cut off" in str(e).lower() and "token" in str(e).lower()
+
+
+def test_complete_json_generic_error_when_not_truncated(monkeypatch):
+    from app.llm import LLMClient, LLMError
+    c = LLMClient("anthropic", "sk-test")
+    monkeypatch.setattr(c, "_complete", lambda *a, **k: ("not json at all", False))
+    try:
+        c.complete_json("s", "u")
+        assert False, "should raise"
+    except LLMError as e:
+        assert "did not return valid JSON" in str(e)

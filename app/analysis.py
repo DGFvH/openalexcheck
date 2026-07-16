@@ -98,7 +98,11 @@ ITEMS:
 
 
 def extract_references(llm: LLMClient, text: str, max_tokens: int = 16000) -> list[dict]:
-    data = llm.complete_json(EXTRACT_SYSTEM, EXTRACT_PROMPT.replace("{TEXT}", text), max_tokens=max_tokens)
+    # Extraction is mechanical (pattern-matching over the text); disabling model
+    # thinking gives the whole token budget to the JSON output, which avoids
+    # truncation-induced JSON errors on long documents.
+    data = llm.complete_json(EXTRACT_SYSTEM, EXTRACT_PROMPT.replace("{TEXT}", text),
+                             max_tokens=max_tokens, thinking=False)
     refs = data.get("references")
     if not isinstance(refs, list):
         raise LLMError("The model did not return a 'references' list.")
