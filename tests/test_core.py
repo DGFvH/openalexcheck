@@ -339,6 +339,24 @@ def test_verify_tolerates_any_request_shape(monkeypatch):
                     headers={"Content-Type": "text/plain"})
     assert r.status_code == 200 and r.json()["count"] == 1
 
+    # EduGenAI wraps the function arguments under a platform-chosen key
+    # ("parameters"); any wrapper name must be descended into, not just a
+    # known list. This was the real-world count:0 failure.
+    for wrapper in ("parameters", "params", "properties", "anything_else"):
+        r = post("/api/verify_batch",
+                 _json.dumps({wrapper: {"references": [{"title": "A"}, {"title": "B"}]}}))
+        assert r.status_code == 200 and r.json()["count"] == 2, wrapper
+
+    # Wrapper alongside other keys (e.g. the function name).
+    r = post("/api/verify_batch",
+             '{"name":"verify_references","parameters":{"references":[{"title":"A"}]}}')
+    assert r.status_code == 200 and r.json()["count"] == 1
+
+    # A list of scalars nested under a random key is NOT mistaken for a
+    # bibliography, and unrelated payloads still yield an empty result.
+    r = post("/api/verify_batch", '{"tags":["alpha","beta"],"query":"Start"}')
+    assert r.status_code == 200 and r.json()["count"] == 0
+
 
 def test_parse_json_handles_braces_inside_strings():
     from app.llm import _parse_json

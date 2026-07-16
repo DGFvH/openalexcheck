@@ -298,7 +298,9 @@ def _as_key(v: Any) -> Optional[str]:
 def _normalize_batch(payload: Any, _depth: int = 0) -> tuple[list, Optional[str]]:
     """Reduce any reasonable request shape to (references_list, openalex_key).
     Handles: stringified JSON, a bare array, {"references": [...]}, a single
-    reference object, and one level of common wrappers (body/arguments/…)."""
+    reference object, and args nested under ANY wrapper key ({"parameters":
+    {...}} etc. — EduGenAI wraps the function arguments, and the wrapper name
+    is the platform's choice, so we descend rather than match a fixed list)."""
     payload = _loads_maybe(payload)
     if isinstance(payload, list):
         return payload, None
@@ -310,16 +312,17 @@ def _normalize_batch(payload: Any, _depth: int = 0) -> tuple[list, Optional[str]
         return [refs], key
     if isinstance(refs, list):
         return refs, key
-    # No usable 'references' key — try common function-call wrappers…
-    if _depth < 3:
-        for wrap in ("body", "input", "arguments", "data", "payload", "request"):
-            if wrap in payload:
-                inner_refs, inner_key = _normalize_batch(payload[wrap], _depth + 1)
-                if inner_refs:
-                    return inner_refs, (key or inner_key)
-    # …otherwise the object itself may BE a single reference.
+    # The object itself may BE a single reference…
     if _looks_like_ref(payload):
         return [payload], key
+    # …otherwise descend into nested values looking for something that yields
+    # actual reference OBJECTS (so a stray list of scalars is never mistaken
+    # for a bibliography).
+    if _depth < 4:
+        for v in payload.values():
+            inner_refs, inner_key = _normalize_batch(v, _depth + 1)
+            if inner_refs and any(isinstance(_loads_maybe(r), dict) for r in inner_refs):
+                return inner_refs, (key or inner_key)
     return [], key
 
 
