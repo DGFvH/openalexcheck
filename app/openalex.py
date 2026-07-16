@@ -153,15 +153,34 @@ def _get_work_by_doi(client: httpx.Client, doi: str) -> Optional[dict]:
     return resp.json()
 
 
+def _search_query(title: str) -> str:
+    """Title as a title.search value: strip only the characters that are
+    OpenAlex filter syntax (comma/colon separate filters, pipe/ampersand are
+    OR/AND). Apostrophes MUST survive — the search index treats "don't" as one
+    token, so "don t"/"dont" match nothing and a real work would be flagged as
+    a potential hallucination."""
+    cleaned = (title or "").translate(str.maketrans({c: " " for c in ",:|&"}))
+    return " ".join(cleaned.split())
+
+
 def _search_works_by_title(client: httpx.Client, title: str, per_page: int = 6) -> list[dict]:
-    # Commas and colons are OpenAlex filter syntax — strip them from the value.
-    safe = normalize_title(title)
+    safe = _search_query(title)
     if not safe:
         return []
     resp = _get(client, "/works", params={"filter": f"title.search:{safe}", "per-page": per_page})
     if resp.status_code >= 400:
         return []
-    return resp.json().get("results", [])
+    results = resp.json().get("results", [])
+    if results:
+        return results
+    # Fallback: the fully-normalized form (all punctuation stripped) —
+    # occasionally rescues titles whose other punctuation confuses the index.
+    fallback = normalize_title(title)
+    if fallback and fallback != safe.lower():
+        resp = _get(client, "/works", params={"filter": f"title.search:{fallback}", "per-page": per_page})
+        if resp.status_code < 400:
+            return resp.json().get("results", [])
+    return []
 
 
 def score_candidate(ref: dict, work_summary: dict) -> float:

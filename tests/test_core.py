@@ -35,6 +35,20 @@ def test_normalize_and_similarity():
     assert title_similarity("completely different thing", a) < 0.5
 
 
+def test_search_query_keeps_apostrophes():
+    """OpenAlex title.search indexes "don't" as one token — stripping the
+    apostrophe ("don t"/"dont") matches nothing, so a real work would be
+    falsely flagged as a potential hallucination. Only actual filter-syntax
+    characters (comma, colon, pipe, ampersand) may be removed."""
+    from app.openalex import _search_query
+    t = "If you don't want to be late, enumerate: Unpacking reduces the planning fallacy"
+    q = _search_query(t)
+    assert "don't" in q                      # apostrophe survives
+    assert "," not in q and ":" not in q     # filter syntax stripped
+    assert _search_query("A & B | C") == "A B C"
+    assert _search_query("") == ""
+
+
 def test_score_candidate_rewards_year_and_author():
     ref = {"title": "Macroeconomic productivity trends", "year": 2019,
            "first_author_surname": "Smith"}
