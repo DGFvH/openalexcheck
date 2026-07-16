@@ -33,7 +33,9 @@ upload ──▶ text extraction (pypdf / python-docx)
        ──▶ UI: results screen + fuzzy-matches screen
 ```
 
-OpenAlex needs no API key. The LLM runs on the key you paste in the form.
+OpenAlex needs no API key by default; an optional field accepts an
+[OpenAlex Premium](https://openalex.org/pricing) API key for higher rate
+limits. The LLM runs on the key you paste in the form.
 
 ## Run it
 
@@ -57,11 +59,25 @@ Optional: set `OPENALEX_MAILTO=you@example.com` to use OpenAlex's polite pool
 
 A different model can be typed into the optional *Model* field.
 
-## Privacy notes
+## Privacy & key safety
 
-- The API key is sent with the analysis request, held in memory for the
-  duration of that request, and discarded. It is never written to disk,
-  never logged, and never echoed back to the browser.
+Both keys (LLM and optional OpenAlex) are strictly one-time use:
+
+- They arrive in the POST body, are held in memory only for the duration of
+  that request, and are discarded. Nothing is written to disk and there is no
+  database or cache.
+- Keys never appear in this app's URLs, so they cannot end up in access logs
+  (uvicorn logs method/path/status only; request bodies are never logged).
+- Every error message that leaves the server passes through a redaction
+  helper (`app/keysafety.py`) that strips the key strings. This matters
+  because httpx embeds full request URLs — query string included — in its
+  exception text, and provider error bodies are quoted in error details.
+- FastAPI's default 422 validation response echoes request input back; the
+  app overrides that handler to return field locations only.
+- The key inputs use `type="password"` with `autocomplete="new-password"`, so
+  browsers mask them and don't offer to save them. The page keeps them in the
+  form only so the fuzzy-match screen can run follow-up comparisons; a reload
+  clears them.
 - The document text is sent to the LLM provider you selected (that is what
   the key is for) and reference titles/DOIs are sent to OpenAlex. Nothing is
   stored server-side.

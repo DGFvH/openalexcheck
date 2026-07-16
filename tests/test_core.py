@@ -70,3 +70,22 @@ def test_parse_json_plain_and_fenced_and_prose():
     assert _parse_json('Here you go:\n{"a": {"b": 2}} thanks') == {"a": {"b": 2}}
     with pytest.raises(LLMError):
         _parse_json("no json here")
+
+
+def test_redact_removes_all_keys():
+    from app.keysafety import REDACTED, redact
+
+    msg = "error for url 'https://api.openalex.org/works?api_key=SECRET1&x=1' with sk-ant-SECRET2"
+    out = redact(msg, "SECRET1", "sk-ant-SECRET2", None, "  ")
+    assert "SECRET1" not in out
+    assert "SECRET2" not in out
+    assert out.count(REDACTED) == 2
+
+
+def test_openalex_client_includes_key_as_param():
+    from app.openalex import _client
+
+    with _client("premium-key") as c:
+        assert c.params.get("api_key") == "premium-key"
+    with _client(None) as c:
+        assert "api_key" not in c.params

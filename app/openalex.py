@@ -13,7 +13,13 @@ from typing import Any, Optional
 
 import httpx
 
+from .keysafety import redact
+
 OPENALEX_BASE = "https://api.openalex.org"
+
+class OpenAlexAuthError(Exception):
+    """Raised when OpenAlex rejects the supplied API key."""
+
 
 # Similarity thresholds on normalized titles
 FOUND_THRESHOLD = 0.88
@@ -22,11 +28,17 @@ FUZZY_THRESHOLD = 0.55
 _PUNCT_TABLE = str.maketrans({c: " " for c in string.punctuation})
 
 
-def _client() -> httpx.Client:
+def _client(api_key: Optional[str] = None) -> httpx.Client:
+    """OpenAlex client. `api_key` is the user's optional Premium key — one-time
+    use, request-scoped, never stored. Sent as the documented `api_key` query
+    parameter; any error text derived from these requests must be redact()ed
+    because httpx embeds the full URL (query string included) in exceptions."""
     params = {}
     mailto = os.environ.get("OPENALEX_MAILTO")
     if mailto:
         params["mailto"] = mailto
+    if api_key and api_key.strip():
+        params["api_key"] = api_key.strip()
     return httpx.Client(base_url=OPENALEX_BASE, params=params, timeout=30.0,
                         headers={"User-Agent": "openalexcheck/0.1"})
 
@@ -83,10 +95,16 @@ def summarize_work(work: dict) -> dict:
     }
 
 
+def _check_auth(resp: httpx.Response) -> None:
+    if resp.status_code in (401, 403):
+        raise OpenAlexAuthError("OpenAlex rejected the API key. Remove it or check that it is valid.")
+
+
 def _get_work_by_doi(client: httpx.Client, doi: str) -> Optional[dict]:
     resp = client.get(f"/works/https://doi.org/{doi}")
     if resp.status_code == 404:
         return None
+    _check_auth(resp)
     resp.raise_for_status()
     return resp.json()
 
@@ -97,6 +115,7 @@ def _search_works_by_title(client: httpx.Client, title: str, per_page: int = 6) 
     if not safe:
         return []
     resp = client.get("/works", params={"filter": f"title.search:{safe}", "per-page": per_page})
+    _check_auth(resp)
     if resp.status_code >= 400:
         return []
     return resp.json().get("results", [])
@@ -121,7 +140,7 @@ def score_candidate(ref: dict, work_summary: dict) -> float:
     return score
 
 
-def resolve_reference(ref: dict) -> dict:
+def resolve_reference(ref: dict, api_key: Optional[str] = None) -> dict:
     """Resolve one extracted reference against OpenAlex.
 
     Returns {"status": "found"|"fuzzy"|"not_found", "work": ..., "candidates": [...], "notes": [...]}
@@ -129,7 +148,7 @@ def resolve_reference(ref: dict) -> dict:
     notes: list[str] = []
     candidates: list[dict] = []
 
-    with _client() as client:
+    with _client(api_key) as client:
         doi = clean_doi(ref.get("doi") or "")
         doi_work = None
         if doi:
@@ -137,7 +156,7 @@ def resolve_reference(ref: dict) -> dict:
                 raw = _get_work_by_doi(client, doi)
             except httpx.HTTPError as exc:
                 raw = None
-                notes.append(f"OpenAlex DOI lookup failed: {exc}")
+                notes.append(redact(f"OpenAlex DOI lookup failed: {exc}", api_key))
             if raw:
                 doi_work = summarize_work(raw)
                 sim = title_similarity(ref.get("title") or "", doi_work["title"] or "")
@@ -157,7 +176,7 @@ def resolve_reference(ref: dict) -> dict:
                 results = _search_works_by_title(client, title)
             except httpx.HTTPError as exc:
                 results = []
-                notes.append(f"OpenAlex title search failed: {exc}")
+                notes.append(redact(f"OpenAlex title search failed: {exc}", api_key))
             seen = {c.get("openalex_id") for c in candidates}
             scored = []
             for raw in results:

@@ -113,11 +113,11 @@ def extract_references(llm: LLMClient, text: str) -> list[dict]:
     return cleaned
 
 
-def verify_references(refs: list[dict]) -> list[dict]:
+def verify_references(refs: list[dict], openalex_key: Optional[str] = None) -> list[dict]:
     """Hallucination check: resolve every reference against OpenAlex."""
     results = []
     for ref in refs:
-        resolution = resolve_reference(ref)
+        resolution = resolve_reference(ref, api_key=openalex_key)
         results.append({"reference": ref, **resolution})
     return results
 

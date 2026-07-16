@@ -84,13 +84,20 @@
         </select>
       </div>
       <div>
-        <label>Your API key (one-time use)</label>
-        <input type="password" id="api_key" autocomplete="off" placeholder="sk-...">
+        <label>Your LLM API key (one-time use)</label>
+        <input type="password" id="api_key" autocomplete="new-password" spellcheck="false" placeholder="sk-...">
         <div class="keynote">Used only for this analysis, sent directly to the provider, never stored or logged.</div>
       </div>
       <div>
         <label>Model (optional)</label>
         <input type="text" id="model" placeholder="provider default">
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>OpenAlex API key (optional)</label>
+        <input type="password" id="openalex_key" autocomplete="new-password" spellcheck="false" placeholder="only needed for OpenAlex Premium">
+        <div class="keynote">OpenAlex works without a key. If you have a Premium key, it is likewise one-time use and never stored.</div>
       </div>
     </div>
     <div class="checks">
@@ -147,6 +154,7 @@ async function runAnalysis() {
   fd.append("provider", $("provider").value);
   fd.append("api_key", key);
   fd.append("model", $("model").value.trim());
+  fd.append("openalex_key", $("openalex_key").value.trim());
   fd.append("check_hallucination", $("check_hallucination").checked);
   fd.append("check_misquote", $("check_misquote").checked);
 
