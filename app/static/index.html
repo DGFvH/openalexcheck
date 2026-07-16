@@ -93,6 +93,17 @@
   .scheck.muted { background: var(--bg); color: var(--muted); border-color: var(--border); }
   .ref-body { padding: 0 1.1rem 1rem; }
   .ref.static { padding: .9rem 1.1rem; }  /* non-collapsing cards (fuzzy screen) */
+  /* Each check (Source / Usage) is its own collapsible part inside a card. */
+  .part { border: 1px solid var(--border); border-radius: 6px; margin-top: .7rem; background: #fff; }
+  .part > summary.part-sum { list-style: none; cursor: pointer; padding: .5rem .7rem; display: flex; align-items: center; flex-wrap: wrap; gap: .35rem .5rem; }
+  .part > summary.part-sum::-webkit-details-marker { display: none; }
+  .part > summary.part-sum::before { content: "▸"; color: var(--muted); font-size: .8rem; transition: transform .15s; }
+  .part[open] > summary.part-sum::before { transform: rotate(90deg); }
+  .part[open] > summary.part-sum { border-bottom: 1px solid var(--border); }
+  .part-no { display: inline-flex; align-items: center; justify-content: center; width: 1.15rem; height: 1.15rem; border-radius: 4px; background: var(--bg); color: var(--muted); font-size: .72rem; font-weight: 700; }
+  .part-name { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+  .part > summary.part-sum .hint { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); font-size: .78rem; flex-basis: 100%; }
+  .part-body { padding: .1rem .7rem .7rem; }
   .sect { border-top: 1px solid var(--border); margin-top: .85rem; padding-top: .7rem; }
   .sect-title { margin: 0 0 .45rem; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
   .sect-title .hint { font-weight: 400; text-transform: none; letter-spacing: 0; }
@@ -605,7 +616,7 @@ function appendResultCard(r) {
 function patchMisquote(r) {
   const card = CARDS[r.reference.id];
   if (!card) return;
-  const slot = card.querySelector(".misquote");
+  const slot = card.querySelector(".usage-part");
   if (slot) slot.outerHTML = renderMisquote(r);
   const checks = card.querySelector(".ref-checks");
   if (checks) checks.innerHTML = refChecks(r);  // refresh the collapsed Usage verdict
@@ -784,7 +795,17 @@ function renderFieldCheck(r) {
     <tbody>${rows}</tbody></table></details>`;
 }
 
+// Summary bar for one collapsible part (Source / Usage). Shows the numbered
+// section title, its verdict chip, and the one-line hint.
+function partSummary(no, name, v, hint) {
+  return `<summary class="part-sum"><span class="part-no">${no}</span>
+      <span class="part-name">${name}</span>
+      <span class="scheck ${v.cls}">${v.label}</span>
+      <span class="hint">${hint}</span></summary>`;
+}
+
 function renderSourceCheck(r) {
+  const sv = sourceVerdict(r);
   const notes = (r.notes || []).filter(n => !/Metadata mismatch/.test(n))
     .map(n => `<div class="note">⚠ ${esc(n)}</div>`).join("");
   let workLine = "";
@@ -798,13 +819,15 @@ function renderSourceCheck(r) {
   if (!DATA.checks.misquote && r.status === "found" && r.work && r.work.abstract) {
     abstractBit = `<details class="abstract"><summary>OpenAlex abstract</summary><p>${esc(r.work.abstract)}</p></details>`;
   }
-  return `<div class="sect">
-    <h4 class="sect-title">1 · Source check <span class="hint">— does the reference exist, and do the printed details match?</span></h4>
-    ${workLine}
+  const body = `${workLine}
     ${r.status === "fuzzy" ? '<div class="meta">Close candidates exist but none is an exact match — see the “Fuzzy matches” screen to pick the right work.</div>' : notes}
     ${renderFieldCheck(r)}
-    ${abstractBit}
-  </div>`;
+    ${abstractBit}`;
+  // Auto-open when it needs a look; collapsed when the source is clean.
+  return `<details class="part source-part"${sv.cls !== "ok" ? " open" : ""}>
+    ${partSummary("1", "Source check", sv, "— does the reference exist, and do the printed details match?")}
+    <div class="part-body">${body}</div>
+  </details>`;
 }
 
 function renderResult(r) {
@@ -825,19 +848,26 @@ function renderResult(r) {
 }
 
 function renderMisquote(r) {
-  if (!DATA.checks.misquote) return `<div class="misquote"></div>`;
+  if (!DATA.checks.misquote) return "";  // check 2 not run — no usage part at all
+  const uv = usageVerdict(r) || { label: "", cls: "muted" };
   const m = r.misquote;
   const contexts = r.reference.contexts || [];
-  const open = `<div class="sect misquote" id="mq-${r.reference.id}">
-    <h4 class="sect-title">2 · Usage check <span class="hint">— is the source cited for what it actually says?</span></h4>`;
+  let body;
   if (!m) {
     if (r.status === "found" && !FINALIZED)
-      return open + `<div class="meta">⏳ Comparing the citation context against the abstract…</div></div>`;
-    if (r.status === "found")
-      return open + `<div class="meta">Usage check unavailable for this reference.</div></div>`;
-    return open + `<div class="meta">Only run for verified references.</div></div>`;
+      body = `<div class="meta">⏳ Comparing the citation context against the abstract…</div>`;
+    else if (r.status === "found")
+      body = `<div class="meta">Usage check unavailable for this reference.</div>`;
+    else
+      body = `<div class="meta">Only run for verified references.</div>`;
+  } else {
+    body = misquoteBlock(m, contexts, r.work && r.work.abstract);
   }
-  return open + misquoteBlock(m, contexts, r.work && r.work.abstract) + `</div>`;
+  // Auto-open when it needs a look (or is still resolving); collapsed when consistent.
+  return `<details class="part usage-part"${uv.cls !== "ok" ? " open" : ""}>
+    ${partSummary("2", "Usage check", uv, "— is the source cited for what it actually says?")}
+    <div class="part-body">${body}</div>
+  </details>`;
 }
 
 function misquoteBlock(m, contexts, abstract) {

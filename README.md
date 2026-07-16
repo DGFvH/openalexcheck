@@ -139,7 +139,13 @@ pytest
 
 ## License
 
-© Daniël van Hemert. All rights reserved (license to follow).
+Source-available under the [PolyForm Noncommercial License 1.0.0](LICENSE)
+© Daniël van Hemert.
+
+You are free to use, modify, self-host, and share it for any **noncommercial**
+purpose — personal, academic, research, or non-profit. Commercial use
+(including selling it or offering it as a paid service) is **not** granted by
+this license; contact the author for commercial terms.
 
 Data sources retain their own terms: bibliographic metadata and abstracts come
 from [OpenAlex](https://openalex.org) (CC0), and analysis runs on whichever LLM
