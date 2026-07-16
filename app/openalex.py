@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import re
 import string
+import time
 from difflib import SequenceMatcher
 from typing import Any, Optional
 
@@ -95,16 +96,48 @@ def summarize_work(work: dict) -> dict:
     }
 
 
+class OpenAlexLookupError(Exception):
+    """A lookup could not be completed (network error or non-auth 4xx/5xx after
+    retries). Distinct from 'no results found' — the caller must NOT treat this
+    as a hallucination, since a transient failure is not evidence of absence."""
+
+
 def _check_auth(resp: httpx.Response) -> None:
     if resp.status_code in (401, 403):
         raise OpenAlexAuthError("OpenAlex rejected the API key. Remove it or check that it is valid.")
 
 
+def _get(client: httpx.Client, path: str, params: Optional[dict] = None,
+         attempts: int = 3) -> httpx.Response:
+    """GET with retry on transient failures (network errors, 429, 5xx).
+
+    A transient failure here would otherwise masquerade as 'reference not found'
+    and produce a false hallucination flag — so we retry, then raise loudly.
+    """
+    last_exc: Optional[Exception] = None
+    for i in range(attempts):
+        try:
+            resp = client.get(path, params=params)
+        except httpx.HTTPError as exc:
+            last_exc = exc
+        else:
+            _check_auth(resp)  # never retry an auth rejection
+            if resp.status_code < 400 or resp.status_code == 404:
+                return resp
+            if resp.status_code not in (429,) and resp.status_code < 500:
+                # Non-transient client error (bad query etc.) — don't spin.
+                return resp
+            last_exc = httpx.HTTPStatusError(
+                f"OpenAlex returned {resp.status_code}", request=resp.request, response=resp)
+        if i < attempts - 1:
+            time.sleep(0.5 * (i + 1))
+    raise OpenAlexLookupError(str(last_exc) if last_exc else "OpenAlex request failed")
+
+
 def _get_work_by_doi(client: httpx.Client, doi: str) -> Optional[dict]:
-    resp = client.get(f"/works/https://doi.org/{doi}")
+    resp = _get(client, f"/works/https://doi.org/{doi}")
     if resp.status_code == 404:
         return None
-    _check_auth(resp)
     resp.raise_for_status()
     return resp.json()
 
@@ -114,8 +147,7 @@ def _search_works_by_title(client: httpx.Client, title: str, per_page: int = 6) 
     safe = normalize_title(title)
     if not safe:
         return []
-    resp = client.get("/works", params={"filter": f"title.search:{safe}", "per-page": per_page})
-    _check_auth(resp)
+    resp = _get(client, "/works", params={"filter": f"title.search:{safe}", "per-page": per_page})
     if resp.status_code >= 400:
         return []
     return resp.json().get("results", [])
@@ -148,14 +180,16 @@ def resolve_reference(ref: dict, api_key: Optional[str] = None) -> dict:
     notes: list[str] = []
     candidates: list[dict] = []
 
+    lookup_failed = False
     with _client(api_key) as client:
         doi = clean_doi(ref.get("doi") or "")
         doi_work = None
         if doi:
             try:
                 raw = _get_work_by_doi(client, doi)
-            except httpx.HTTPError as exc:
+            except (httpx.HTTPError, OpenAlexLookupError) as exc:
                 raw = None
+                lookup_failed = True
                 notes.append(redact(f"OpenAlex DOI lookup failed: {exc}", api_key))
             if raw:
                 doi_work = summarize_work(raw)
@@ -174,8 +208,9 @@ def resolve_reference(ref: dict, api_key: Optional[str] = None) -> dict:
         if title:
             try:
                 results = _search_works_by_title(client, title)
-            except httpx.HTTPError as exc:
+            except (httpx.HTTPError, OpenAlexLookupError) as exc:
                 results = []
+                lookup_failed = True
                 notes.append(redact(f"OpenAlex title search failed: {exc}", api_key))
             seen = {c.get("openalex_id") for c in candidates}
             scored = []
@@ -198,6 +233,12 @@ def resolve_reference(ref: dict, api_key: Optional[str] = None) -> dict:
     if candidates:
         notes.append("No exact match, but close candidates exist — review them on the fuzzy-matches screen.")
         return {"status": "fuzzy", "work": None, "candidates": candidates, "notes": notes}
+
+    if lookup_failed:
+        # A lookup errored and produced no results — do NOT accuse the
+        # reference of being fabricated on the strength of a failed request.
+        notes.append("OpenAlex could not be reached to verify this reference — retry before treating it as unverified.")
+        return {"status": "lookup_failed", "work": None, "candidates": [], "notes": notes}
 
     notes.append("No matching work found in OpenAlex — potential hallucinated reference.")
     return {"status": "not_found", "work": None, "candidates": [], "notes": notes}

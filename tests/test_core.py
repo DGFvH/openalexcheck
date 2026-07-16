@@ -89,3 +89,37 @@ def test_openalex_client_includes_key_as_param():
         assert c.params.get("api_key") == "premium-key"
     with _client(None) as c:
         assert "api_key" not in c.params
+
+
+def test_lookup_failure_is_not_a_hallucination(monkeypatch):
+    """A transient OpenAlex failure must surface as 'lookup_failed', never as a
+    'not_found' hallucination accusation."""
+    import httpx
+    from app import openalex
+
+    def boom(*a, **k):
+        raise httpx.ConnectError("network down")
+
+    monkeypatch.setattr(openalex, "_get_work_by_doi", boom)
+    monkeypatch.setattr(openalex, "_search_works_by_title", boom)
+    res = openalex.resolve_reference(
+        {"title": "Some real paper", "year": 2020, "doi": "10.1/x"})
+    assert res["status"] == "lookup_failed"
+    assert res["status"] != "not_found"
+
+
+def test_get_retries_then_raises(monkeypatch):
+    import httpx
+    from app import openalex
+
+    calls = {"n": 0}
+
+    class C:
+        def get(self, path, params=None):
+            calls["n"] += 1
+            raise httpx.ConnectError("down")
+
+    monkeypatch.setattr(openalex.time, "sleep", lambda *_: None)
+    with pytest.raises(openalex.OpenAlexLookupError):
+        openalex._get(C(), "/works", attempts=3)
+    assert calls["n"] == 3

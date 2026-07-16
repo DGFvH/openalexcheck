@@ -34,6 +34,10 @@
   }
   button.primary:disabled { opacity: .55; cursor: wait; }
   .keynote { font-size: .78rem; color: var(--muted); font-family: system-ui, sans-serif; margin-top: .3rem; }
+  .privacy { margin-top: 1.2rem; font-family: system-ui, sans-serif; font-size: .82rem; color: var(--muted); }
+  .privacy summary { cursor: pointer; color: var(--accent); }
+  .privacy ul { margin: .5rem 0 0; padding-left: 1.1rem; }
+  .privacy li { margin: .3rem 0; }
   .tabs { display: flex; gap: .4rem; margin-top: 1.6rem; border-bottom: 2px solid var(--border); }
   .tabs button {
     background: none; border: 0; padding: .6rem 1rem; font: inherit; font-family: system-ui, sans-serif;
@@ -42,7 +46,7 @@
   .tabs button.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
   .badge { display: inline-block; padding: .13rem .55rem; border-radius: 999px; font-family: system-ui, sans-serif; font-size: .72rem; font-weight: 600; color: #fff; vertical-align: middle; }
   .badge.found { background: var(--ok); } .badge.fuzzy { background: var(--warn); }
-  .badge.not_found { background: var(--bad); }
+  .badge.not_found { background: var(--bad); } .badge.lookup_failed { background: var(--info); }
   .badge.match { background: var(--ok); } .badge.likely_mismatch { background: var(--warn); }
   .badge.mismatch { background: var(--bad); } .badge.unclear { background: var(--info); }
   .ref { border: 1px solid var(--border); border-radius: 8px; padding: .9rem 1.1rem; margin-top: .9rem; background: #fff; }
@@ -106,6 +110,15 @@
       <label><input type="checkbox" id="check_misquote" checked>
         <span><strong>2 · Misquote check</strong><small>Does the citing sentence match what the source's abstract says?</small></span></label>
     </div>
+    <details class="privacy">
+      <summary>What data leaves your machine?</summary>
+      <ul>
+        <li><strong>OpenAlex</strong> receives only reference <em>titles and DOIs</em> — never the paper's prose, the student's name, or any body text.</li>
+        <li><strong>Your chosen LLM</strong> receives the document text (needed to locate the reference list and citing sentences) and, for the misquote check, the citation snippets plus OpenAlex abstracts — nothing more.</li>
+        <li>All three providers state that data sent via an <em>API key</em> is <strong>not used to train their models</strong> by default. Since you bring your own key, the request runs under your account's terms.</li>
+        <li>This tool stores nothing: no database, no file writes, no logs of your document or keys.</li>
+      </ul>
+    </details>
     <button class="primary" id="run">Run checks</button>
     <div class="spinner hidden" id="spinner">Analysing… extracting references, querying OpenAlex, comparing contexts. This can take a minute or two.</div>
     <div class="error hidden" id="error"></div>
@@ -126,7 +139,7 @@
 const $ = id => document.getElementById(id);
 let DATA = null;
 
-const STATUS_LABEL = { found: "Verified", fuzzy: "Fuzzy match", not_found: "Potential hallucination" };
+const STATUS_LABEL = { found: "Verified", fuzzy: "Fuzzy match", not_found: "Potential hallucination", lookup_failed: "Lookup failed" };
 const VERDICT_LABEL = { match: "Consistent", likely_mismatch: "Likely mismatch", mismatch: "Mismatch", unclear: "Unclear" };
 
 $("run").addEventListener("click", runAnalysis);
@@ -187,13 +200,14 @@ function esc(s) {
 
 function render() {
   const results = DATA.results;
-  const counts = { found: 0, fuzzy: 0, not_found: 0 };
+  const counts = { found: 0, fuzzy: 0, not_found: 0, lookup_failed: 0 };
   results.forEach(r => counts[r.status]++);
   $("summary").innerHTML =
     `<span>${results.length} references</span>` +
     `<span style="color:var(--ok)">● ${counts.found} verified</span>` +
     `<span style="color:var(--warn)">● ${counts.fuzzy} fuzzy</span>` +
-    `<span style="color:var(--bad)">● ${counts.not_found} potential hallucinations</span>`;
+    `<span style="color:var(--bad)">● ${counts.not_found} potential hallucinations</span>` +
+    (counts.lookup_failed ? `<span style="color:var(--info)">● ${counts.lookup_failed} lookup failed</span>` : "");
   $("fuzzy-count").textContent = counts.fuzzy ? `(${counts.fuzzy})` : "";
 
   $("screen-results").innerHTML = results.map(renderResult).join("") ||
