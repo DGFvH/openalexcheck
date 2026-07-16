@@ -33,6 +33,8 @@
   .header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
   .credit { text-align: right; font-family: system-ui, sans-serif; font-size: .8rem; color: var(--muted); }
   .credit-name { display: block; margin-bottom: .2rem; }
+  .credit-name a { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
+  .credit-name a:hover { color: var(--accent); }
   .credit-links { display: inline-flex; gap: .5rem; justify-content: flex-end; }
   .credit-links a { color: var(--muted); display: inline-flex; transition: color .15s; }
   .credit-links a:hover { color: var(--accent); }
@@ -161,7 +163,8 @@
   <div class="header-top">
     <h1>Citation Checker <em>· OpenAlex</em></h1>
     <div class="credit">
-      <span class="credit-name">© Daniël van Hemert</span>
+      <span class="credit-name">© Daniël van Hemert ·
+        <a href="https://github.com/DGFvH/openalexcheck/blob/main/LICENSE" target="_blank" rel="noopener" title="PolyForm Noncommercial License 1.0.0">Noncommercial license</a></span>
       <span class="credit-links">
         <a href="https://danielvanhemert.com" target="_blank" rel="noopener" title="danielvanhemert.com" aria-label="Website">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm6.9 6h-2.5a15.6 15.6 0 00-1.3-3.4A8 8 0 0118.9 8zM12 4c.7 1 1.3 2.3 1.7 4h-3.4c.4-1.7 1-3 1.7-4zM4.3 14a8 8 0 010-4h2.9a17 17 0 000 4H4.3zm.8 2h2.5c.3 1.2.8 2.4 1.3 3.4A8 8 0 015.1 16zm2.5-8H5.1a8 8 0 013.8-3.4C8.4 5.6 7.9 6.8 7.6 8zM12 20c-.7-1-1.3-2.3-1.7-4h3.4c-.4 1.7-1 3-1.7 4zm2.1-6H9.9a15 15 0 010-4h4.2a15 15 0 010 4zm.8 5.4c.5-1 1-2.2 1.3-3.4h2.5a8 8 0 01-3.8 3.4zM16.8 14a17 17 0 000-4h2.9a8 8 0 010 4h-2.9z"/></svg>
@@ -174,6 +177,9 @@
         </a>
         <a href="https://orcid.org/0000-0002-1391-1714" target="_blank" rel="noopener" title="ORCID" aria-label="ORCID">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zM8.2 6.9a1 1 0 110 2 1 1 0 010-2zM7.3 10h1.8v7.6H7.3V10zm3.5 0h3.3c3.1 0 4.5 2.2 4.5 3.8 0 1.8-1.4 3.8-4.5 3.8h-3.3V10zm1.8 1.6v4.4h1.3c1.9 0 2.6-1.3 2.6-2.2 0-1.4-.9-2.2-2.6-2.2h-1.3z"/></svg>
+        </a>
+        <a href="https://github.com/DGFvH/openalexcheck" target="_blank" rel="noopener" title="Source code on GitHub" aria-label="GitHub repository">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2A10 10 0 002 12c0 4.42 2.87 8.17 6.84 9.5.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.53 2.34 1.09 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.56 9.56 0 015 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0022 12 10 10 0 0012 2z"/></svg>
         </a>
       </span>
     </div>
