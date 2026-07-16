@@ -185,6 +185,7 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
       <p>Under <strong>Functions</strong>, add a function that points at the batch endpoint.</p>
       <p><span class="field-label">Method &amp; URL</span></p>
       <div class="codewrap"><pre id="c-url">POST  https://YOUR-DEPLOYMENT-HOST/api/verify_batch</pre><button class="copy" data-for="c-url">Copy</button></div>
+      <div class="note"><strong>If POST sends an empty body on your platform</strong> (see Troubleshooting), use <code class="inline">GET</code> with the same URL instead — the endpoint accepts the arguments in the query string too.</div>
       <p><span class="field-label">Function definition (name, description, JSON parameters)</span></p>
       <div class="codewrap"><pre id="c-schema">{
   "name": "verify_references",
@@ -290,8 +291,9 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
   <p>Every response now carries an <code class="inline">api_version</code> field, and any response with zero results carries a <code class="inline">hint</code> field describing what the server actually received. Ask the assistant to show the raw output and read those two fields:</p>
   <ul>
     <li><strong>No <code class="inline">api_version</code> in the response?</strong> The extension is calling an <em>old deployment</em>. Vercel preview URLs and old branch deployments keep serving stale builds forever — open the extension in the builder and make sure the function URL is exactly <code class="inline">https://www.phantocite.com/api/verify_batch</code> (or your current production host), not a preview/branch URL.</li>
-    <li><strong>A <code class="inline">hint</code> saying no references could be read?</strong> It describes the body shape that arrived (key names only, never content) — send that hint to the tool's maintainer, or adjust the function schema to match Step 4.</li>
-    <li><strong>"start" produces a menu instead of a run?</strong> Your extension still has an old Detail description — re-paste it from Step 2 (the saved copy never updates itself).</li>
+    <li><strong>The hint says the body was <em>empty</em> (<code class="inline">Content-Length: 0</code>)?</strong> The platform is not putting the function arguments into the POST body at all — the assistant composed them, but the HTTP call left without them. Two fixes: (1) <strong>change the function's Method from POST to GET</strong> — platforms serialize arguments into the URL query string on GET, and this endpoint accepts that; (2) if the builder has a <em>request body / body template</em> field for the function, set it to pass the arguments through.</li>
+    <li><strong>A <code class="inline">hint</code> saying no references could be read (body not empty)?</strong> It describes the shape that arrived (key names only, never content) — send that hint to the tool's maintainer, or adjust the function schema to match Step 4.</li>
+    <li><strong>"start" produces a menu instead of a run?</strong> Your extension still has an old Detail description — re-paste it from Step 2 (the saved copy never updates itself). The most dependable prompt: <em>“Use the execution steps in the verify_references extension in order to check the references in the attached pdf.”</em></li>
   </ul>
   <p>To check the endpoint independently of EduGenAI, run this from any terminal — a healthy deployment answers in a couple of seconds with <code class="inline">count: 1</code> and a <code class="inline">Verified</code> result:</p>
   <div class="codewrap"><pre id="c-curl">curl -s -X POST https://www.phantocite.com/api/verify_batch \

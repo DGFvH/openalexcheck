@@ -325,6 +325,9 @@ def build():
     story.append(Paragraph("Step 4 — Add the function", H2))
     story.append(Paragraph("Method &amp; URL", LABEL))
     story.append(code(f"POST  {HOST}/api/verify_batch"))
+    story.append(Paragraph("If POST sends an empty body on your platform (see "
+                           "Troubleshooting), use GET with the same URL instead — the "
+                           "endpoint accepts the arguments in the query string too.", BODY))
     story.append(Paragraph("Function definition", LABEL))
     story.append(code(SCHEMA))
 
@@ -343,16 +346,22 @@ def build():
                            "extension and submit again.", BODY))
     story.append(Paragraph("Troubleshooting — count: 0", H2))
     story.append(Paragraph("Every response carries an api_version field, and a response with "
-                           "zero results carries a hint field describing the body shape the "
-                           "server received (key names only, never content). Ask the assistant "
-                           "to show the raw output: no api_version means the extension calls an "
+                           "zero results carries a hint field describing what the server "
+                           "received (key names only, never content). Ask the assistant to "
+                           "show the raw output: no api_version means the extension calls an "
                            "OLD deployment — fix the function URL (preview/branch URLs keep "
-                           "serving stale builds). A hint means the body shape was unreadable — "
-                           "send it to the maintainer. You can test the endpoint from a "
-                           "terminal: curl -s -X POST <host>/api/verify_batch -H \"Content-Type: "
-                           "application/json\" -d '{\"references\":[{\"title\":\"Attention is all "
-                           "you need\",\"year\":2017}]}' — a healthy deployment answers within "
-                           "seconds with count: 1 and a Verified result.", BODY))
+                           "serving stale builds). A hint saying the body was EMPTY "
+                           "(Content-Length: 0) means the platform never put the function "
+                           "arguments into the POST body — change the function's Method from "
+                           "POST to GET (arguments then travel in the query string, which the "
+                           "endpoint accepts), or fill in the builder's request-body/template "
+                           "field if it has one. Any other hint describes the shape that "
+                           "arrived — send it to the maintainer. You can test the endpoint from "
+                           "a terminal: curl -s -X POST <host>/api/verify_batch -H "
+                           "\"Content-Type: application/json\" -d '{\"references\":[{\"title\":"
+                           "\"Attention is all you need\",\"year\":2017}]}' — a healthy "
+                           "deployment answers within seconds with count: 1 and a Verified "
+                           "result.", BODY))
 
     story.append(PageBreak())
     story.append(Paragraph("What the endpoint returns", H2))

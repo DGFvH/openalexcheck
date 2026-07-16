@@ -452,6 +452,14 @@ def test_verify_tolerates_any_request_shape(monkeypatch):
     d = r.json()
     assert d["count"] == 0
     assert "empty" in d["hint"] and "unrelated" in d["hint"]  # query keys surfaced
+    assert "GET" in d["hint"]  # the empty-body escape hatch is spelled out
+
+    # GET works outright — for platforms that never fill a POST body, the
+    # function method can simply be switched to GET.
+    r = client.get("/api/verify_batch?references=" + _q('[{"title":"A"},{"title":"B"}]'))
+    assert r.status_code == 200 and r.json()["count"] == 2
+    r = client.get("/api/verify?title=" + _q("A real paper") + "&year=2019")
+    assert r.status_code == 200 and r.json()["status"] == "found"
 
 
 def test_parse_json_handles_braces_inside_strings():

@@ -468,11 +468,14 @@ def _verify_response(res: dict) -> dict:
     }
 
 
+@app.get("/api/verify")
 @app.post("/api/verify")
 async def api_verify(request: Request, x_openalex_key: Optional[str] = Header(default=None)):
     """Verify a single reference against OpenAlex. Returns existence, a field-by-
     field metadata comparison, and the abstract. No LLM, no auth required.
-    Accepts any body shape an LLM might send — never rejects on shape or type."""
+    Accepts any body shape an LLM might send — never rejects on shape or type.
+    GET works too: the reference fields ride the query string (for platforms
+    that never put function arguments in a POST body)."""
     payload = await _read_json(request)
     references, body_key = _normalize_batch(payload)
     if not references:
@@ -502,7 +505,8 @@ def _batch_item(idx: int, raw: Any, key: Optional[str]) -> dict:
 # Included in every verify response so a pasted extension transcript shows
 # WHICH build answered — a count:0 from a stale deployment is otherwise
 # indistinguishable from a parsing failure on the current one.
-API_VERSION = "2026-07-16.6"
+# BUMP THIS on every change to these endpoints' behavior.
+API_VERSION = "2026-07-16.7"
 
 
 def _from_query(request: Request) -> tuple[list, Optional[str]]:
@@ -532,20 +536,32 @@ def _shape_hint(payload: Any, request: Optional[Request] = None) -> str:
         ct = request.headers.get("content-type") or "none"
         cl = request.headers.get("content-length") or "0"
         qkeys = sorted(request.query_params.keys())
-        desc += f" (Content-Type: {ct}; Content-Length: {cl}; query-string keys: {qkeys})"
+        # Non-infrastructure header KEYS (never values) — reveals arguments
+        # riding in a custom header.
+        boring = ("host", "user-agent", "accept", "content-", "connection",
+                  "x-forwarded", "x-real-ip", "forwarded", "x-vercel", "cf-",
+                  "sec-", "via", "cdn-", "traceparent", "x-request-id", "priority")
+        extra_headers = sorted(k for k in {h.lower() for h in request.headers.keys()}
+                               if not any(k.startswith(b) for b in boring))
+        desc += (f" (method: {request.method}; Content-Type: {ct}; Content-Length: {cl}; "
+                 f"query-string keys: {qkeys}; other header keys: {extra_headers})")
     return ("No references could be read from the request body, which was " + desc +
             '. Expected {"references": [{"title": "...", "authors": [...], "year": ...}, ...]}. '
+            "If the platform does not put the function arguments in the POST body "
+            "(Content-Length: 0), set the function's Method to GET — the arguments then "
+            "travel in the query string, which this endpoint accepts. "
             "If you are an assistant relaying this to a user: report this hint verbatim. "
-            "Check that the extension's endpoint URL points at the CURRENT deployment "
-            "(see /edugenai for the format and a test command).")
+            "See /edugenai for the format and a test command.")
 
 
+@app.get("/api/verify_batch")
 @app.post("/api/verify_batch")
 async def api_verify_batch(request: Request, x_openalex_key: Optional[str] = Header(default=None)):
     """Verify many references in one call (preferred for a whole bibliography —
     one round trip). Accepts any body shape an LLM might send; malformed entries
     are reported per-reference, never failing the whole batch; lookups run in
-    parallel to keep a big bibliography fast."""
+    parallel to keep a big bibliography fast. GET works too: the arguments ride
+    the query string (for platforms that never put them in a POST body)."""
     payload = await _read_json(request)
     references, body_key = _normalize_batch(payload)
     if not references:
