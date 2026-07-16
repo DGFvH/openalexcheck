@@ -74,8 +74,25 @@
   .badge.not_found { background: var(--bad); } .badge.lookup_failed { background: var(--info); }
   .badge.match { background: var(--ok); } .badge.likely_mismatch { background: var(--warn); }
   .badge.mismatch { background: var(--bad); } .badge.unclear { background: var(--info); }
-  .ref { border: 1px solid var(--border); border-radius: 8px; padding: .9rem 1.1rem; margin-top: .9rem; background: #fff; }
+  .ref { border: 1px solid var(--border); border-radius: 8px; margin-top: .9rem; background: #fff; }
   .ref .raw { font-size: .9rem; background: var(--bg); border-left: 3px solid #cfc9bb; border-radius: 4px; padding: .5rem .8rem; margin: .4rem 0 0; }
+  /* Each card auto-collapses; the summary bar stays visible and carries both
+     section verdicts, so the whole list can be scanned without expanding. */
+  .ref > summary { list-style: none; cursor: pointer; padding: .8rem 1.1rem; display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; }
+  .ref > summary::-webkit-details-marker { display: none; }
+  .ref > summary::after { content: "▸"; color: var(--muted); font-size: .8rem; margin-left: .1rem; transition: transform .15s; }
+  .ref[open] > summary::after { transform: rotate(90deg); }
+  .ref[open] > summary { border-bottom: 1px solid var(--border); }
+  .ref-sum-title { flex-basis: 100%; font-size: .82rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ref-checks { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: .4rem; }
+  .scheck { font-family: system-ui, sans-serif; font-size: .74rem; font-weight: 600; padding: .13rem .55rem; border-radius: 999px; border: 1px solid transparent; }
+  .scheck b { font-weight: 700; margin-right: .15rem; }
+  .scheck.ok { background: #dfeee8; color: var(--ok); }
+  .scheck.warn { background: #f6ecd0; color: #8a5a12; }
+  .scheck.bad { background: #f6dcd8; color: var(--bad); }
+  .scheck.muted { background: var(--bg); color: var(--muted); border-color: var(--border); }
+  .ref-body { padding: 0 1.1rem 1rem; }
+  .ref.static { padding: .9rem 1.1rem; }  /* non-collapsing cards (fuzzy screen) */
   .sect { border-top: 1px solid var(--border); margin-top: .85rem; padding-top: .7rem; }
   .sect-title { margin: 0 0 .45rem; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
   .sect-title .hint { font-weight: 400; text-transform: none; letter-spacing: 0; }
@@ -590,6 +607,8 @@ function patchMisquote(r) {
   if (!card) return;
   const slot = card.querySelector(".misquote");
   if (slot) slot.outerHTML = renderMisquote(r);
+  const checks = card.querySelector(".ref-checks");
+  if (checks) checks.innerHTML = refChecks(r);  // refresh the collapsed Usage verdict
 }
 
 // A found reference is "flagged" when it exists but something needs a human
@@ -689,6 +708,42 @@ function sevChip(r) {
   return "";
 }
 
+// Per-section verdict shown on the always-visible summary bar, so a reader can
+// see, without expanding, whether each of the two checks needs a look.
+function sourceVerdict(r) {
+  if (r.status === "not_found") return { label: "Not found", cls: "bad" };
+  if (r.status === "fuzzy") return { label: "Review", cls: "warn" };
+  if (r.status === "lookup_failed") return { label: "Not checked", cls: "muted" };
+  if ((r.field_check || []).some(f => f.status === "mismatch")) return { label: "Review", cls: "bad" };
+  return { label: "Verified", cls: "ok" };
+}
+function usageVerdict(r) {
+  if (!DATA.checks || !DATA.checks.misquote) return null;  // check 2 wasn't run
+  const m = r.misquote;
+  if (!m) {
+    if (r.status === "found" && !FINALIZED) return { label: "Checking…", cls: "muted" };
+    return { label: "n/a", cls: "muted" };
+  }
+  if (m.verdict === "mismatch" || m.verdict === "likely_mismatch") return { label: "Review", cls: "bad" };
+  if (m.verdict === "unclear") return { label: "Unclear", cls: "warn" };
+  return { label: "Verified", cls: "ok" };  // "match"
+}
+function refChecks(r) {
+  const chip = (n, name, v) => `<span class="scheck ${v.cls}"><b>${n})</b> ${name}: ${v.label}</span>`;
+  const uv = usageVerdict(r);
+  return chip("1", "Source", sourceVerdict(r)) + (uv ? chip("2", "Usage", uv) : "");
+}
+
+function refSummary(r) {
+  const ref = r.reference;
+  return `<summary>
+      <span class="badge ${r.status}">${STATUS_LABEL[r.status]}</span>${sevChip(r)}
+      <span class="refno">Ref #${ref.id}</span>
+      <span class="ref-sum-title">${esc(ref.raw || ref.title || "(unlabelled reference)")}</span>
+      <span class="ref-checks">${refChecks(r)}</span>
+    </summary>`;
+}
+
 function refHeader(r) {
   const ref = r.reference;
   return `<div class="ref-head"><span class="badge ${r.status}">${STATUS_LABEL[r.status]}</span>${sevChip(r)}
@@ -753,11 +808,20 @@ function renderSourceCheck(r) {
 }
 
 function renderResult(r) {
-  return `<div class="ref" id="ref-${r.reference.id}">
-    ${refHeader(r)}
-    ${renderSourceCheck(r)}
-    ${renderMisquote(r)}
-  </div>`;
+  const ref = r.reference;
+  // Auto-collapsed card: the summary bar (badge + both section verdicts) is
+  // always visible; the details expand on click.
+  return `<details class="ref" id="ref-${ref.id}">
+    ${refSummary(r)}
+    <div class="ref-body">
+      <div class="sect" style="border-top:0;padding-top:.7rem;margin-top:0">
+        <h4 class="sect-title">Reference — as printed in the paper</h4>
+        <div class="raw">${esc(ref.raw || ref.title || "(unlabelled reference)")}</div>
+      </div>
+      ${renderSourceCheck(r)}
+      ${renderMisquote(r)}
+    </div>
+  </details>`;
 }
 
 function renderMisquote(r) {
@@ -804,7 +868,7 @@ function renderFuzzy(r) {
       <div class="meta">${esc(c.match_reason || "")}${c.doi ? " · doi:" + esc(c.doi) : ""}</div>
       ${DATA.checks.misquote ? `<button data-ref="${r.reference.id}" data-cand="${i}">Use this match & run misquote check</button>` : ""}
     </div>`).join("");
-  return `<div class="ref" id="fuzzy-${r.reference.id}">${refHeader(r)}${notes}
+  return `<div class="ref static" id="fuzzy-${r.reference.id}">${refHeader(r)}${notes}
     <div class="meta" style="margin-top:.5rem"><strong>Candidate works in OpenAlex:</strong></div>${cands}
     <div id="fuzzy-mq-${r.reference.id}"></div>
   </div>`;
