@@ -38,6 +38,9 @@
   .credit-links a:hover { color: var(--accent); }
   button.stop { margin-top: 1.3rem; margin-left: .6rem; background: #fff; color: var(--bad); border: 1px solid var(--bad); border-radius: 6px; padding: .65rem 1.2rem; font: inherit; font-family: system-ui, sans-serif; font-size: .95rem; cursor: pointer; }
   button.stop:hover { background: var(--bad); color: #fff; }
+  button.sample { margin-top: 1.3rem; margin-left: .6rem; background: #e8e4da; color: #4a463d; border: 1px solid var(--border); border-radius: 6px; padding: .65rem 1.2rem; font: inherit; font-family: system-ui, sans-serif; font-size: .95rem; cursor: pointer; }
+  button.sample:hover { background: #ddd7c9; }
+  .sample-banner { font-family: system-ui, sans-serif; font-size: .85rem; background: #eef0ee; border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 6px; padding: .6rem .9rem; margin-top: 1rem; color: var(--ink); }
   main { max-width: 960px; margin: 0 auto; padding: 0 1.5rem 4rem; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.3rem 1.5rem; margin-top: 1.2rem; }
   label { display: block; font-size: .85rem; color: var(--muted); margin: .9rem 0 .25rem; font-family: system-ui, sans-serif; }
@@ -198,6 +201,7 @@
     </details>
     <button class="primary" id="run">Run checks</button>
     <button class="stop hidden" id="stop">■ Stop</button>
+    <button class="sample" id="sample" title="See an example — no file or key needed">Sample output</button>
     <div class="progress-panel hidden" id="progress-panel">
       <div class="progress-head">
         <span class="dot"></span>
@@ -276,6 +280,7 @@ const VERDICT_LABEL = { match: "Consistent", likely_mismatch: "Likely mismatch",
 
 $("run").addEventListener("click", runAnalysis);
 $("stop").addEventListener("click", stopAnalysis);
+$("sample").addEventListener("click", showSample);
 $("provider").addEventListener("change", populateModels);
 $("model_select").addEventListener("change", onModelChange);
 $("tab-results").addEventListener("click", () => switchTab("results"));
@@ -308,6 +313,125 @@ function endRunUI() {
   $("stop").classList.add("hidden");
   const dot = $("progress-panel").querySelector(".dot");
   if (dot) dot.style.animationPlayState = "paused";
+}
+
+// --- sample output: five real papers (2 clean, 3 with realistic citation
+// errors), rendered through the exact same pipeline. No file or key needed. ---
+const SAMPLE = [
+  {
+    reference: { id: 1, raw: "Shannon, C. E., & Weaver, W. (1948). A mathematical theory of communication. Bell System Technical Journal, 27(3), 379–423.",
+      title: "A Mathematical Theory of Communication", authors: ["Shannon, C. E.", "Weaver, W."], year: 1948,
+      doi: "10.1002/j.1538-7305.1948.tb01338.x", container: "Bell System Technical Journal", volume: "27", pages: "379-423",
+      contexts: ["Information theory provides the mathematical basis for measuring information content (Shannon & Weaver, 1948)."] },
+    status: "found", candidates: [], notes: [], field_mismatch_count: 1,
+    work: { title: "A Mathematical Theory of Communication", authors: ["Claude E. Shannon"], year: 1948,
+      venue: "Bell System Technical Journal", volume: "27", pages: "379-423", doi: "10.1002/j.1538-7305.1948.tb01338.x",
+      url: "https://doi.org/10.1002/j.1538-7305.1948.tb01338.x",
+      abstract: "This paper introduces a mathematical framework for quantifying information. It defines entropy and channel capacity and establishes the fundamental limits of data compression and of reliable transmission over a noisy channel." },
+    field_check: [
+      { field: "title", status: "match", reference_value: "A mathematical theory of communication", openalex_value: "A Mathematical Theory of Communication" },
+      { field: "authors", status: "mismatch", reference_value: "Shannon, C. E., Weaver, W.", openalex_value: "Claude E. Shannon", detail: "Not on the record: Weaver, W. — Weaver co-authored the 1949 book, not this 1948 paper." },
+      { field: "year", status: "match", reference_value: 1948, openalex_value: 1948 },
+      { field: "journal", status: "match", reference_value: "Bell System Technical Journal", openalex_value: "Bell System Technical Journal" },
+      { field: "pages", status: "match", reference_value: "379-423", openalex_value: "379-423" } ],
+    misquote: { id: 1, verdict: "match", explanation: "The abstract's scope (foundations of information theory) matches how the source is used.",
+      paper_topic: "mathematical theory of information", student_usage: "foundations of information theory",
+      abstract_summary: "Founds information theory: defines entropy and channel capacity and the limits of compression and transmission." },
+  },
+  {
+    reference: { id: 2, raw: "Solow, R. M. (1957). Technical change and the aggregate production function. The Review of Economics and Statistics, 39(3), 312–320.",
+      title: "Technical Change and the Aggregate Production Function", authors: ["Solow, R. M."], year: 1957,
+      doi: "10.2307/1926047", container: "The Review of Economics and Statistics", volume: "39", issue: "3", pages: "312-320",
+      contexts: ["Solow (1957) showed that labour productivity rises chiefly because workers become more skilled over time."] },
+    status: "found", candidates: [], notes: [], field_mismatch_count: 0,
+    work: { title: "Technical Change and the Aggregate Production Function", authors: ["Robert M. Solow"], year: 1957,
+      venue: "The Review of Economics and Statistics", volume: "39", issue: "3", pages: "312-320", doi: "10.2307/1926047",
+      url: "https://doi.org/10.2307/1926047",
+      abstract: "This paper separates shifts in the aggregate production function (technical change) from movements along it caused by changes in capital per worker. It finds that the greater part of the growth in output per worker is attributable to technical change rather than to capital deepening." },
+    field_check: [
+      { field: "title", status: "match", reference_value: "Technical change and the aggregate production function", openalex_value: "Technical Change and the Aggregate Production Function" },
+      { field: "authors", status: "match", reference_value: "Solow, R. M.", openalex_value: "Robert M. Solow" },
+      { field: "year", status: "match", reference_value: 1957, openalex_value: 1957 },
+      { field: "journal", status: "match", reference_value: "The Review of Economics and Statistics", openalex_value: "The Review of Economics and Statistics" },
+      { field: "pages", status: "match", reference_value: "312-320", openalex_value: "312-320" } ],
+    misquote: { id: 2, verdict: "mismatch", explanation: "The student cites this as direct evidence about labour productivity and worker skill, but the paper's subject is aggregate technical change (total factor productivity) — a different concept.",
+      paper_topic: "aggregate technical change / total factor productivity", student_usage: "growth in labour productivity from worker skill",
+      abstract_summary: "Decomposes output-per-worker growth into capital deepening versus technical change, attributing most of it to technical change." },
+  },
+  {
+    reference: { id: 3, raw: "He, K., Zhang, X., Ren, S., & Sun, J. (2015). Deep residual learning for image recognition. arXiv preprint arXiv:1512.03385.",
+      title: "Deep Residual Learning for Image Recognition", authors: ["He, K.", "Zhang, X.", "Ren, S.", "Sun, J."], year: 2015,
+      doi: null, container: "arXiv", contexts: ["Residual connections make it possible to train networks with hundreds of layers (He et al., 2015)."] },
+    status: "found", candidates: [], notes: [], field_mismatch_count: 2,
+    work: { title: "Deep Residual Learning for Image Recognition", authors: ["Kaiming He", "Xiangyu Zhang", "Shaoqing Ren", "Jian Sun"], year: 2016,
+      venue: "IEEE Conference on Computer Vision and Pattern Recognition", doi: "10.1109/CVPR.2016.90",
+      url: "https://doi.org/10.1109/CVPR.2016.90",
+      abstract: "We present a residual learning framework to ease the training of networks that are substantially deeper than those used previously. Residual networks are easier to optimize and gain accuracy from considerably increased depth, achieving 3.57% error on the ImageNet test set." },
+    field_check: [
+      { field: "title", status: "match", reference_value: "Deep residual learning for image recognition", openalex_value: "Deep Residual Learning for Image Recognition" },
+      { field: "authors", status: "match", reference_value: "He, K., Zhang, X., Ren, S., Sun, J.", openalex_value: "Kaiming He, Xiangyu Zhang, Shaoqing Ren, Jian Sun" },
+      { field: "year", status: "mismatch", reference_value: 2015, openalex_value: 2016, detail: "OpenAlex's record is the 2016 CVPR publication; 2015 is the arXiv preprint." },
+      { field: "journal", status: "mismatch", reference_value: "arXiv", openalex_value: "IEEE Conference on Computer Vision and Pattern Recognition", detail: "Cited to the preprint server rather than the published venue." } ],
+    misquote: { id: 3, verdict: "match", explanation: "Consistent — the abstract confirms residual learning enables very deep networks.",
+      paper_topic: "residual networks for image recognition", student_usage: "training very deep CNNs with residual connections",
+      abstract_summary: "Introduces ResNet, using residual connections to train very deep image-recognition networks." },
+  },
+  {
+    reference: { id: 4, raw: "Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., Kaiser, Ł., & Polosukhin, I. (2017). Attention is all you need. Advances in Neural Information Processing Systems, 30.",
+      title: "Attention Is All You Need", authors: ["Vaswani, A.", "Shazeer, N.", "Parmar, N.", "Uszkoreit, J."], year: 2017,
+      doi: null, container: "Advances in Neural Information Processing Systems",
+      contexts: ["Vaswani et al. (2017) demonstrated that a model built entirely on self-attention can outperform recurrent architectures on machine translation."] },
+    status: "found", candidates: [], notes: [], field_mismatch_count: 0,
+    work: { title: "Attention Is All You Need", authors: ["Ashish Vaswani", "Noam Shazeer", "Niki Parmar", "Jakob Uszkoreit", "Llion Jones", "Aidan N. Gomez"], year: 2017,
+      venue: "Neural Information Processing Systems", doi: null, url: "https://arxiv.org/abs/1706.03762",
+      abstract: "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks. We propose the Transformer, a model architecture based solely on attention mechanisms, dispensing with recurrence and convolutions entirely, that is superior in quality while being more parallelizable." },
+    field_check: [
+      { field: "title", status: "match", reference_value: "Attention is all you need", openalex_value: "Attention Is All You Need" },
+      { field: "authors", status: "match", reference_value: "Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J.", openalex_value: "Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit…" },
+      { field: "year", status: "match", reference_value: 2017, openalex_value: 2017 },
+      { field: "journal", status: "match", reference_value: "Advances in Neural Information Processing Systems", openalex_value: "Neural Information Processing Systems" } ],
+    misquote: { id: 4, verdict: "match", explanation: "Consistent with the abstract's claim that attention alone can replace recurrence.",
+      paper_topic: "attention-based sequence transduction", student_usage: "attention replaces recurrence",
+      abstract_summary: "Introduces the Transformer, a model built entirely on attention that dispenses with recurrence and convolutions." },
+  },
+  {
+    reference: { id: 5, raw: "Jumper, J., Evans, R., Pritzel, A., et al. (2021). Highly accurate protein structure prediction with AlphaFold. Nature, 596, 583–589.",
+      title: "Highly accurate protein structure prediction with AlphaFold", authors: ["Jumper, J.", "Evans, R.", "Pritzel, A."], et_al: true, year: 2021,
+      doi: "10.1038/s41586-021-03819-2", container: "Nature", volume: "596", pages: "583-589",
+      contexts: ["Recent advances in deep learning have enabled accurate protein structure prediction from sequence (Jumper et al., 2021)."] },
+    status: "found", candidates: [], notes: [], field_mismatch_count: 0,
+    work: { title: "Highly accurate protein structure prediction with AlphaFold", authors: ["John Jumper", "Richard Evans", "Alexander Pritzel", "Tim Green", "Michael Figurnov"], year: 2021,
+      venue: "Nature", volume: "596", pages: "583-589", doi: "10.1038/s41586-021-03819-2",
+      url: "https://doi.org/10.1038/s41586-021-03819-2",
+      abstract: "We present AlphaFold, a computational method that predicts protein structures with atomic accuracy even where no similar structure is known. It provides accurate predictions for the majority of a large, structurally diverse set of proteins." },
+    field_check: [
+      { field: "title", status: "match", reference_value: "Highly accurate protein structure prediction with AlphaFold", openalex_value: "Highly accurate protein structure prediction with AlphaFold" },
+      { field: "authors", status: "match", reference_value: "Jumper, J., Evans, R., Pritzel, A., et al.", openalex_value: "John Jumper, Richard Evans, Alexander Pritzel…" },
+      { field: "year", status: "match", reference_value: 2021, openalex_value: 2021 },
+      { field: "doi", status: "match", reference_value: "10.1038/s41586-021-03819-2", openalex_value: "10.1038/s41586-021-03819-2" },
+      { field: "journal", status: "match", reference_value: "Nature", openalex_value: "Nature" },
+      { field: "pages", status: "match", reference_value: "583-589", openalex_value: "583-589" } ],
+    misquote: { id: 5, verdict: "match", explanation: "Consistent — the source is used exactly for what the abstract describes.",
+      paper_topic: "protein structure prediction from sequence", student_usage: "deep learning predicts 3D protein structure",
+      abstract_summary: "Presents AlphaFold, which predicts 3D protein structure from sequence at near-experimental accuracy." },
+  },
+];
+
+function showSample() {
+  stopAnalysis();
+  DATA = { checks: { hallucination: true, misquote: true }, results: JSON.parse(JSON.stringify(SAMPLE)) };
+  FINALIZED = false;
+  for (const k in CARDS) delete CARDS[k];
+  $("error").classList.add("hidden");
+  $("progress-panel").classList.add("hidden");
+  endRunUI();
+  ensureResultsVisible();
+  finalize();
+  const banner = document.createElement("div");
+  banner.className = "sample-banner";
+  banner.innerHTML = "🧪 <strong>Sample output</strong> — an illustrative example using five real papers (three cited with errors, two clean). This is a static demo: no document or API key was used.";
+  $("screen-results").prepend(banner);
+  $("results-area").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function runAnalysis() {
