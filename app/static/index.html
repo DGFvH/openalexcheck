@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Citation Checker — OpenAlex</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🔎</text></svg>">
+
 <style>
   :root {
     --bg: #f6f4ef; --card: #ffffff; --ink: #26241f; --muted: #6f6a5f;
@@ -93,8 +95,9 @@
         <div class="keynote">Used only for this analysis, sent directly to the provider, never stored or logged.</div>
       </div>
       <div>
-        <label>Model (optional)</label>
-        <input type="text" id="model" placeholder="provider default">
+        <label>Model</label>
+        <select id="model_select"></select>
+        <input type="text" id="model" class="hidden" autocomplete="off" placeholder="exact model id" style="margin-top:.4rem">
       </div>
     </div>
     <div class="row">
@@ -139,12 +142,55 @@
 const $ = id => document.getElementById(id);
 let DATA = null;
 
+// Curated model lists per provider. The first entry is the default. The
+// backend accepts any model string, so "Custom…" reveals a free-text field.
+const MODELS = {
+  anthropic: [
+    ["claude-opus-4-8", "Claude Opus 4.8 (recommended)"],
+    ["claude-sonnet-5", "Claude Sonnet 5 (faster, cheaper)"],
+    ["claude-haiku-4-5", "Claude Haiku 4.5 (fastest)"],
+  ],
+  gemini: [
+    ["gemini-2.5-flash", "Gemini 2.5 Flash (recommended)"],
+    ["gemini-2.5-pro", "Gemini 2.5 Pro (most capable)"],
+    ["gemini-2.5-flash-lite", "Gemini 2.5 Flash-Lite (cheapest)"],
+  ],
+  openai: [
+    ["gpt-4o-mini", "GPT-4o mini (recommended)"],
+    ["gpt-4o", "GPT-4o (most capable)"],
+    ["gpt-4.1-mini", "GPT-4.1 mini"],
+  ],
+};
+
+function populateModels() {
+  const provider = $("provider").value;
+  const sel = $("model_select");
+  sel.innerHTML = MODELS[provider].map(([v, label]) => `<option value="${v}">${label}</option>`).join("")
+    + `<option value="__custom__">Custom…</option>`;
+  onModelChange();
+}
+
+function onModelChange() {
+  const custom = $("model_select").value === "__custom__";
+  $("model").classList.toggle("hidden", !custom);
+  if (custom) $("model").focus();
+}
+
+// Effective model id sent to the backend ("" lets the backend pick its default).
+function selectedModel() {
+  const v = $("model_select").value;
+  return v === "__custom__" ? $("model").value.trim() : v;
+}
+
 const STATUS_LABEL = { found: "Verified", fuzzy: "Fuzzy match", not_found: "Potential hallucination", lookup_failed: "Lookup failed" };
 const VERDICT_LABEL = { match: "Consistent", likely_mismatch: "Likely mismatch", mismatch: "Mismatch", unclear: "Unclear" };
 
 $("run").addEventListener("click", runAnalysis);
+$("provider").addEventListener("change", populateModels);
+$("model_select").addEventListener("change", onModelChange);
 $("tab-results").addEventListener("click", () => switchTab("results"));
 $("tab-fuzzy").addEventListener("click", () => switchTab("fuzzy"));
+populateModels();
 
 function switchTab(name) {
   $("tab-results").classList.toggle("active", name === "results");
@@ -166,7 +212,7 @@ async function runAnalysis() {
   fd.append("file", file);
   fd.append("provider", $("provider").value);
   fd.append("api_key", key);
-  fd.append("model", $("model").value.trim());
+  fd.append("model", selectedModel());
   fd.append("openalex_key", $("openalex_key").value.trim());
   fd.append("check_hallucination", $("check_hallucination").checked);
   fd.append("check_misquote", $("check_misquote").checked);
@@ -294,7 +340,7 @@ function attachFuzzyHandlers() {
           body: JSON.stringify({
             provider: $("provider").value,
             api_key: $("api_key").value.trim(),
-            model: $("model").value.trim(),
+            model: selectedModel(),
             items: [{ id: refId, title: cand.title, abstract: cand.abstract, contexts: r.reference.contexts }],
           }),
         });
