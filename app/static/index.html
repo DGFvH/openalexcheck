@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Citation Checker — OpenAlex</title>
+<style>
+  :root {
+    --bg: #f6f4ef; --card: #ffffff; --ink: #26241f; --muted: #6f6a5f;
+    --accent: #1f6f5c; --border: #e2ddd2;
+    --ok: #1f6f5c; --warn: #b07d18; --bad: #b3392f; --info: #4a5f8a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Georgia, "Times New Roman", serif; background: var(--bg); color: var(--ink); }
+  header { padding: 2.2rem 1.5rem 1rem; max-width: 960px; margin: 0 auto; }
+  h1 { font-size: 1.7rem; margin: 0 0 .3rem; }
+  h1 em { color: var(--accent); font-style: italic; }
+  .sub { color: var(--muted); margin: 0; font-size: .95rem; }
+  main { max-width: 960px; margin: 0 auto; padding: 0 1.5rem 4rem; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.3rem 1.5rem; margin-top: 1.2rem; }
+  label { display: block; font-size: .85rem; color: var(--muted); margin: .9rem 0 .25rem; font-family: system-ui, sans-serif; }
+  input[type=file], input[type=password], input[type=text], select {
+    width: 100%; padding: .55rem .7rem; border: 1px solid var(--border); border-radius: 6px;
+    font: inherit; font-family: system-ui, sans-serif; font-size: .9rem; background: #fff;
+  }
+  .row { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .row > div { flex: 1 1 220px; }
+  .checks { display: flex; gap: 1.6rem; margin-top: 1rem; flex-wrap: wrap; font-family: system-ui, sans-serif; font-size: .92rem; }
+  .checks label { display: flex; align-items: flex-start; gap: .5rem; margin: 0; color: var(--ink); font-size: .92rem; cursor: pointer; }
+  .checks small { display: block; color: var(--muted); }
+  button.primary {
+    margin-top: 1.3rem; background: var(--accent); color: #fff; border: 0; border-radius: 6px;
+    padding: .65rem 1.4rem; font: inherit; font-family: system-ui, sans-serif; font-size: .95rem; cursor: pointer;
+  }
+  button.primary:disabled { opacity: .55; cursor: wait; }
+  .keynote { font-size: .78rem; color: var(--muted); font-family: system-ui, sans-serif; margin-top: .3rem; }
+  .tabs { display: flex; gap: .4rem; margin-top: 1.6rem; border-bottom: 2px solid var(--border); }
+  .tabs button {
+    background: none; border: 0; padding: .6rem 1rem; font: inherit; font-family: system-ui, sans-serif;
+    font-size: .92rem; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -2px;
+  }
+  .tabs button.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+  .badge { display: inline-block; padding: .13rem .55rem; border-radius: 999px; font-family: system-ui, sans-serif; font-size: .72rem; font-weight: 600; color: #fff; vertical-align: middle; }
+  .badge.found { background: var(--ok); } .badge.fuzzy { background: var(--warn); }
+  .badge.not_found { background: var(--bad); }
+  .badge.match { background: var(--ok); } .badge.likely_mismatch { background: var(--warn); }
+  .badge.mismatch { background: var(--bad); } .badge.unclear { background: var(--info); }
+  .ref { border: 1px solid var(--border); border-radius: 8px; padding: .9rem 1.1rem; margin-top: .9rem; background: #fff; }
+  .ref .raw { font-size: .92rem; margin: .35rem 0 .2rem; }
+  .meta, .note { font-family: system-ui, sans-serif; font-size: .8rem; color: var(--muted); margin-top: .25rem; }
+  .note { color: #8a5a12; }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; margin-top: .7rem; }
+  @media (max-width: 700px) { .compare { grid-template-columns: 1fr; } }
+  .compare .box { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: .6rem .8rem; font-size: .85rem; }
+  .compare .box h4 { margin: 0 0 .35rem; font-family: system-ui, sans-serif; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+  .verdict { margin-top: .6rem; font-family: system-ui, sans-serif; font-size: .85rem; }
+  .cand { border-top: 1px dashed var(--border); margin-top: .7rem; padding-top: .7rem; font-size: .9rem; }
+  .cand button { font-family: system-ui, sans-serif; font-size: .78rem; padding: .3rem .8rem; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; cursor: pointer; margin-top: .35rem; }
+  .cand button:hover { background: var(--accent); color: #fff; }
+  .summary { font-family: system-ui, sans-serif; font-size: .9rem; margin-top: 1rem; display: flex; gap: 1.4rem; flex-wrap: wrap; }
+  .error { color: var(--bad); font-family: system-ui, sans-serif; font-size: .9rem; margin-top: 1rem; white-space: pre-wrap; }
+  .spinner { font-family: system-ui, sans-serif; color: var(--muted); margin-top: 1rem; }
+  .hidden { display: none; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Citation Checker <em>· OpenAlex</em></h1>
+  <p class="sub">Upload a student paper (PDF or DOCX). Every reference is looked up in OpenAlex;
+  citation contexts are compared against the real abstracts using your own LLM API key.</p>
+</header>
+<main>
+  <div class="card" id="form-card">
+    <label>Document (.pdf or .docx)</label>
+    <input type="file" id="file" accept=".pdf,.docx">
+    <div class="row">
+      <div>
+        <label>LLM provider</label>
+        <select id="provider">
+          <option value="anthropic">Claude (Anthropic)</option>
+          <option value="gemini">Gemini (Google)</option>
+          <option value="openai">ChatGPT (OpenAI)</option>
+        </select>
+      </div>
+      <div>
+        <label>Your API key (one-time use)</label>
+        <input type="password" id="api_key" autocomplete="off" placeholder="sk-...">
+        <div class="keynote">Used only for this analysis, sent directly to the provider, never stored or logged.</div>
+      </div>
+      <div>
+        <label>Model (optional)</label>
+        <input type="text" id="model" placeholder="provider default">
+      </div>
+    </div>
+    <div class="checks">
+      <label><input type="checkbox" id="check_hallucination" checked>
+        <span><strong>1 · Hallucination check</strong><small>Does each reference actually exist in OpenAlex?</small></span></label>
+      <label><input type="checkbox" id="check_misquote" checked>
+        <span><strong>2 · Misquote check</strong><small>Does the citing sentence match what the source's abstract says?</small></span></label>
+    </div>
+    <button class="primary" id="run">Run checks</button>
+    <div class="spinner hidden" id="spinner">Analysing… extracting references, querying OpenAlex, comparing contexts. This can take a minute or two.</div>
+    <div class="error hidden" id="error"></div>
+  </div>
+
+  <div id="results-area" class="hidden">
+    <div class="tabs">
+      <button id="tab-results" class="active">Results</button>
+      <button id="tab-fuzzy">Fuzzy matches <span id="fuzzy-count"></span></button>
+    </div>
+    <div class="summary" id="summary"></div>
+    <div id="screen-results"></div>
+    <div id="screen-fuzzy" class="hidden"></div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let DATA = null;
+
+const STATUS_LABEL = { found: "Verified", fuzzy: "Fuzzy match", not_found: "Potential hallucination" };
+const VERDICT_LABEL = { match: "Consistent", likely_mismatch: "Likely mismatch", mismatch: "Mismatch", unclear: "Unclear" };
+
+$("run").addEventListener("click", runAnalysis);
+$("tab-results").addEventListener("click", () => switchTab("results"));
+$("tab-fuzzy").addEventListener("click", () => switchTab("fuzzy"));
+
+function switchTab(name) {
+  $("tab-results").classList.toggle("active", name === "results");
+  $("tab-fuzzy").classList.toggle("active", name === "fuzzy");
+  $("screen-results").classList.toggle("hidden", name !== "results");
+  $("screen-fuzzy").classList.toggle("hidden", name !== "fuzzy");
+}
+
+async function runAnalysis() {
+  const file = $("file").files[0];
+  const key = $("api_key").value.trim();
+  $("error").classList.add("hidden");
+  if (!file) return showError("Please choose a PDF or DOCX file.");
+  if (!key) return showError("Please paste your API key (it is used once and not stored).");
+  if (!$("check_hallucination").checked && !$("check_misquote").checked)
+    return showError("Tick at least one of the two checks.");
+
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("provider", $("provider").value);
+  fd.append("api_key", key);
+  fd.append("model", $("model").value.trim());
+  fd.append("check_hallucination", $("check_hallucination").checked);
+  fd.append("check_misquote", $("check_misquote").checked);
+
+  $("run").disabled = true;
+  $("spinner").classList.remove("hidden");
+  $("results-area").classList.add("hidden");
+  try {
+    const resp = await fetch("/api/analyze", { method: "POST", body: fd });
+    const body = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(body.detail || `Request failed (${resp.status})`);
+    DATA = body;
+    render();
+  } catch (err) {
+    showError(err.message);
+  } finally {
+    $("run").disabled = false;
+    $("spinner").classList.add("hidden");
+  }
+}
+
+function showError(msg) {
+  $("error").textContent = msg;
+  $("error").classList.remove("hidden");
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function render() {
+  const results = DATA.results;
+  const counts = { found: 0, fuzzy: 0, not_found: 0 };
+  results.forEach(r => counts[r.status]++);
+  $("summary").innerHTML =
+    `<span>${results.length} references</span>` +
+    `<span style="color:var(--ok)">● ${counts.found} verified</span>` +
+    `<span style="color:var(--warn)">● ${counts.fuzzy} fuzzy</span>` +
+    `<span style="color:var(--bad)">● ${counts.not_found} potential hallucinations</span>`;
+  $("fuzzy-count").textContent = counts.fuzzy ? `(${counts.fuzzy})` : "";
+
+  $("screen-results").innerHTML = results.map(renderResult).join("") ||
+    "<p class='meta'>No references found.</p>";
+  $("screen-fuzzy").innerHTML = results.filter(r => r.status === "fuzzy").map(renderFuzzy).join("") ||
+    "<p class='meta' style='margin-top:1rem'>No fuzzy matches — every reference either resolved cleanly or was not found at all.</p>";
+  $("results-area").classList.remove("hidden");
+  switchTab("results");
+  attachFuzzyHandlers();
+}
+
+function refHeader(r) {
+  const ref = r.reference;
+  return `<span class="badge ${r.status}">${STATUS_LABEL[r.status]}</span>
+    <div class="raw">${esc(ref.raw || ref.title || "(unlabelled reference)")}</div>`;
+}
+
+function renderResult(r) {
+  const notes = (r.notes || []).map(n => `<div class="note">⚠ ${esc(n)}</div>`).join("");
+  let workLine = "";
+  if (r.work) {
+    workLine = `<div class="meta">Matched: <a href="${esc(r.work.url)}" target="_blank" rel="noopener">${esc(r.work.title)}</a>
+      (${esc(r.work.year ?? "?")}) — ${esc((r.work.authors || []).slice(0, 3).join(", "))}${r.work.venue ? " · " + esc(r.work.venue) : ""}</div>`;
+  }
+  return `<div class="ref" id="ref-${r.reference.id}">
+    ${refHeader(r)} ${workLine} ${r.status === "fuzzy" ? '<div class="meta">See the “Fuzzy matches” screen to pick the right work.</div>' : notes}
+    ${renderMisquote(r)}
+  </div>`;
+}
+
+function renderMisquote(r) {
+  if (!DATA.checks.misquote) return "";
+  const m = r.misquote;
+  const contexts = r.reference.contexts || [];
+  const target = `<div class="misquote" id="mq-${r.reference.id}">`;
+  if (!m) {
+    if (r.status === "found")
+      return target + `<div class="meta">Misquote check unavailable for this reference.</div></div>`;
+    return target + `</div>`;
+  }
+  const abstract = r.work && r.work.abstract ? r.work.abstract : null;
+  return target + misquoteBlock(m, contexts, abstract) + `</div>`;
+}
+
+function misquoteBlock(m, contexts, abstract) {
+  let html = `<div class="verdict"><span class="badge ${m.verdict}">${VERDICT_LABEL[m.verdict]}</span> ${esc(m.explanation || "")}</div>`;
+  if (m.paper_topic || m.student_usage) {
+    html += `<div class="meta">Paper is about: <strong>${esc(m.paper_topic || "?")}</strong> · Student uses it as: <strong>${esc(m.student_usage || "?")}</strong></div>`;
+  }
+  html += `<div class="compare">
+    <div class="box"><h4>Student's citation context</h4>${contexts.length ? contexts.map(c => `<p>“${esc(c)}”</p>`).join("") : "<p class='meta'>Not cited in the body text.</p>"}</div>
+    <div class="box"><h4>OpenAlex abstract</h4><p>${abstract ? esc(abstract.slice(0, 1200)) + (abstract.length > 1200 ? "…" : "") : "<span class='meta'>No abstract available.</span>"}</p></div>
+  </div>`;
+  return html;
+}
+
+function renderFuzzy(r) {
+  const notes = (r.notes || []).map(n => `<div class="note">⚠ ${esc(n)}</div>`).join("");
+  const cands = (r.candidates || []).map((c, i) => `
+    <div class="cand">
+      <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.title)}</a>
+      (${esc(c.year ?? "?")}) — ${esc((c.authors || []).slice(0, 3).join(", "))}${c.venue ? " · " + esc(c.venue) : ""}
+      <div class="meta">${esc(c.match_reason || "")}${c.doi ? " · doi:" + esc(c.doi) : ""}</div>
+      ${DATA.checks.misquote ? `<button data-ref="${r.reference.id}" data-cand="${i}">Use this match & run misquote check</button>` : ""}
+    </div>`).join("");
+  return `<div class="ref" id="fuzzy-${r.reference.id}">${refHeader(r)}${notes}
+    <div class="meta" style="margin-top:.5rem"><strong>Candidate works in OpenAlex:</strong></div>${cands}
+    <div id="fuzzy-mq-${r.reference.id}"></div>
+  </div>`;
+}
+
+function attachFuzzyHandlers() {
+  document.querySelectorAll(".cand button").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const refId = Number(btn.dataset.ref);
+      const candIdx = Number(btn.dataset.cand);
+      const r = DATA.results.find(x => x.reference.id === refId);
+      const cand = r.candidates[candIdx];
+      btn.disabled = true; btn.textContent = "Comparing…";
+      try {
+        const resp = await fetch("/api/compare", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            provider: $("provider").value,
+            api_key: $("api_key").value.trim(),
+            model: $("model").value.trim(),
+            items: [{ id: refId, title: cand.title, abstract: cand.abstract, contexts: r.reference.contexts }],
+          }),
+        });
+        const body = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(body.detail || `Request failed (${resp.status})`);
+        const m = body.results[0];
+        $(`fuzzy-mq-${refId}`).innerHTML =
+          `<div class="meta" style="margin-top:.6rem"><strong>Misquote check against “${esc(cand.title)}”:</strong></div>` +
+          misquoteBlock(m, r.reference.contexts, cand.abstract);
+      } catch (err) {
+        $(`fuzzy-mq-${refId}`).innerHTML = `<div class="error">${esc(err.message)}</div>`;
+      } finally {
+        btn.disabled = false; btn.textContent = "Use this match & run misquote check";
+      }
+    });
+  });
+}
+</script>
+</body>
+</html>
