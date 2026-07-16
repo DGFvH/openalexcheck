@@ -137,6 +137,7 @@
       <div class="codewrap"><pre id="c-detail">Use this extension to fact-check the reference list of an uploaded paper.
 
 TRIGGER - WHEN TO RUN. Run all four steps below end to end, WITHOUT asking any clarifying question first, whenever the user gives ANY go-ahead while a document is present in the conversation. Triggers include (not exhaustive): "start", "go", "run", "check", "verify", "start the check", "start the extension", "run the extension", "start the references extension", "start the reference verification", "check my citations", "verify my references", any message containing "start" or "run" together with "check", "extension" or "references", or a paper uploaded with no other instruction. Never respond to a trigger with a greeting, a menu of options, or a request to paste the bibliography - the document already in the conversation IS the input. Only if NO document has been provided at all, ask for one, then run.
+The steps run IN ORDER: you must finish STEP 1 (reading the document and extracting the references yourself) BEFORE calling the function in STEP 2. Never call verify_references with an empty, placeholder, or not-yet-extracted references array.
 
 AUDIENCE. The user is a marker / examiner / supervisor checking SOMEONE ELSE'S paper (typically a student's). Never address the user as the paper's author: write "the paper" or "the student's paper", never "your paper" / "you cite". Report findings as facts for a reviewer. Never give feedback or improvement advice to the writer.
 
@@ -217,8 +218,9 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
     </li>
     <li>
       <h3>Submit and test</h3>
-      <p>Click <strong>Submit</strong>. Then, in an EduGenAI chat, upload a paper (or paste its reference list) and ask it to check the citations — e.g. <em>“check the citations in this paper”</em> or <em>“verify the references”</em>. The assistant will call your endpoint and return the verified table.</p>
-      <div class="note"><strong>Why not just “start”?</strong> EduGenAI decides whether to call an extension from what you ask for. A bare “start” or “go” reads as a generic greeting, so it replies with “what would you like to work on?” instead of running the tool. A short request that names <em>citations</em> or <em>references</em> (“check my citations”) is what reliably triggers it.</div>
+      <p>Click <strong>Submit</strong>. Then, in an EduGenAI chat, upload a paper and give a go-ahead — the assistant should extract the references itself and then call your endpoint. The <strong>most dependable prompt</strong> names the extension and the steps explicitly:</p>
+      <div class="codewrap"><pre id="c-prompt">Use the execution steps in the verify_references extension in order to check the references in the attached pdf.</pre><button class="copy" data-for="c-prompt">Copy</button></div>
+      <div class="note"><strong>Why not just “start”?</strong> EduGenAI decides whether to call an extension from what you ask for, and a bare “start” often reads as a generic greeting — you get a menu instead of a run. The descriptions above tell it to treat “start” as a trigger, but the explicit prompt above works even when the platform's tool-selection is being obtuse.</div>
     </li>
   </ol>
 

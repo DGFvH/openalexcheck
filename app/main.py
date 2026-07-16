@@ -475,6 +475,8 @@ async def api_verify(request: Request, x_openalex_key: Optional[str] = Header(de
     Accepts any body shape an LLM might send — never rejects on shape or type."""
     payload = await _read_json(request)
     references, body_key = _normalize_batch(payload)
+    if not references:
+        references, body_key = _from_query(request)
     key = (x_openalex_key or body_key or "").strip() or None
     first = references[0] if references and isinstance(references[0], dict) else {}
     try:
@@ -483,7 +485,7 @@ async def api_verify(request: Request, x_openalex_key: Optional[str] = Header(de
         raise HTTPException(400, redact(str(exc), key))
     resp = {**_verify_response(res), "api_version": API_VERSION}
     if not references:
-        resp["hint"] = _shape_hint(payload)
+        resp["hint"] = _shape_hint(payload, request)
     return resp
 
 
@@ -503,7 +505,16 @@ def _batch_item(idx: int, raw: Any, key: Optional[str]) -> dict:
 API_VERSION = "2026-07-16.6"
 
 
-def _shape_hint(payload: Any) -> str:
+def _from_query(request: Request) -> tuple[list, Optional[str]]:
+    """Fallback when the body yields no references: some platforms bind the
+    function arguments to the URL query string instead of the body (an empty
+    POST body with args in the query is the signature of that)."""
+    if not request.query_params:
+        return [], None
+    return _normalize_batch({k: _loads_maybe(v) for k, v in request.query_params.items()})
+
+
+def _shape_hint(payload: Any, request: Optional[Request] = None) -> str:
     """Human/LLM-readable description of a request body no references could be
     read from. Structure only — key names, types, sizes — NEVER values, which
     could contain keys or document text."""
@@ -517,6 +528,11 @@ def _shape_hint(payload: Any) -> str:
         desc = f"a JSON array of {len(payload)} items, none of which is a reference object"
     else:
         desc = f"of type {type(payload).__name__}"
+    if request is not None:
+        ct = request.headers.get("content-type") or "none"
+        cl = request.headers.get("content-length") or "0"
+        qkeys = sorted(request.query_params.keys())
+        desc += f" (Content-Type: {ct}; Content-Length: {cl}; query-string keys: {qkeys})"
     return ("No references could be read from the request body, which was " + desc +
             '. Expected {"references": [{"title": "...", "authors": [...], "year": ...}, ...]}. '
             "If you are an assistant relaying this to a user: report this hint verbatim. "
@@ -532,6 +548,8 @@ async def api_verify_batch(request: Request, x_openalex_key: Optional[str] = Hea
     parallel to keep a big bibliography fast."""
     payload = await _read_json(request)
     references, body_key = _normalize_batch(payload)
+    if not references:
+        references, body_key = _from_query(request)
     if len(references) > 200:
         raise HTTPException(400, "Too many references in one request (max 200).")
     key = (x_openalex_key or body_key or "").strip() or None
@@ -543,7 +561,7 @@ async def api_verify_batch(request: Request, x_openalex_key: Optional[str] = Hea
         raise HTTPException(400, redact(str(exc), key))
     resp: dict = {"count": len(results), "results": results, "api_version": API_VERSION}
     if not results:
-        resp["hint"] = _shape_hint(payload)
+        resp["hint"] = _shape_hint(payload, request)
     return resp
 
 

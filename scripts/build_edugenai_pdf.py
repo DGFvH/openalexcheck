@@ -65,6 +65,10 @@ or a paper uploaded with no other instruction. Never respond to a trigger with a
 greeting, a menu of options, or a request to paste the bibliography - the
 document already in the conversation IS the input. Only if NO document has been
 provided at all, ask for one, then run.
+The steps run IN ORDER: you must finish STEP 1 (reading the document and
+extracting the references yourself) BEFORE calling the function in STEP 2.
+Never call verify_references with an empty, placeholder, or not-yet-extracted
+references array.
 
 AUDIENCE. The user is a marker / examiner / supervisor checking SOMEONE ELSE'S
 paper (typically a student's). Never address the user as the paper's author:
@@ -328,8 +332,11 @@ def build():
     story.append(Paragraph("Click Submit. In a chat, upload a paper and type “start” (or "
                            "“start the extension”, “check my citations”, …) — the Detail "
                            "description tells the assistant to treat any such go-ahead as the "
-                           "run signal and call your endpoint without asking questions first.",
-                           BODY))
+                           "run signal and call your endpoint without asking questions first. "
+                           "If a short trigger gets a menu instead of a run, use the most "
+                           "dependable, explicit prompt: “Use the execution steps in the "
+                           "verify_references extension in order to check the references in "
+                           "the attached pdf.”", BODY))
     story.append(Paragraph("Installed this extension before? The saved copy does not update "
                            "itself: if “start the extension” gets you a menu instead of a run, "
                            "re-paste the current Detail description from Step 2 into your "

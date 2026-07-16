@@ -442,6 +442,17 @@ def test_verify_tolerates_any_request_shape(monkeypatch):
     assert "query" in d["hint"] and "tags" in d["hint"]     # key names shown
     assert "SECRETVALUE" not in d["hint"]                   # values never echoed
 
+    # Some platforms bind the function arguments to the URL query string and
+    # POST an empty body (the observed EduGenAI failure) — args in the query
+    # must work, and an empty-body hint must name the transport facts.
+    from urllib.parse import quote as _q
+    r = client.post("/api/verify_batch?references=" + _q('[{"title":"A"}]'), content=b"")
+    assert r.status_code == 200 and r.json()["count"] == 1
+    r = client.post("/api/verify_batch?unrelated=1", content=b"")
+    d = r.json()
+    assert d["count"] == 0
+    assert "empty" in d["hint"] and "unrelated" in d["hint"]  # query keys surfaced
+
 
 def test_parse_json_handles_braces_inside_strings():
     from app.llm import _parse_json
