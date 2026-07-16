@@ -26,12 +26,11 @@
   /* One font family throughout (system sans) for consistency and readability;
      the brand title is the only serif accent. */
   body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.5; }
-  header { padding: 2.2rem 1.5rem 1rem; max-width: min(1360px, 94%); margin: 0 auto; }
+  header { padding: 2.2rem 1.5rem 1rem; max-width: min(1200px, 94%); margin: 0 auto; }
   h1 { font-size: 1.7rem; margin: 0 0 .3rem; font-family: Georgia, "Times New Roman", serif; }
   h1 em { color: var(--accent); font-style: italic; }
-  /* Cap the subheader's line length independent of the (now wide) page, and give
-     every subheader paragraph the same gap so the spacing reads evenly. */
-  .sub { color: var(--muted); margin: .4rem 0 0; font-size: .95rem; max-width: 70ch; line-height: 1.5; }
+  /* Uniform gap between subheader paragraphs so the spacing reads evenly. */
+  .sub { color: var(--muted); margin: .4rem 0 0; font-size: .95rem; }
   .sub:first-of-type { margin-top: 0; }
   .header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
   .credit { text-align: right; font-family: system-ui, sans-serif; font-size: .8rem; color: var(--muted); }
@@ -46,7 +45,7 @@
   button.sample { margin-top: 1.3rem; margin-left: .6rem; background: #e8e4da; color: #4a463d; border: 1px solid var(--border); border-radius: 6px; padding: .65rem 1.2rem; font: inherit; font-family: system-ui, sans-serif; font-size: .95rem; cursor: pointer; }
   button.sample:hover { background: #ddd7c9; }
   .sample-banner { font-family: system-ui, sans-serif; font-size: .85rem; background: #eef0ee; border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 6px; padding: .6rem .9rem; margin-top: 1rem; color: var(--ink); }
-  main { max-width: min(1360px, 94%); margin: 0 auto; padding: 0 1.5rem 4rem; }
+  main { max-width: min(1200px, 94%); margin: 0 auto; padding: 0 1.5rem 4rem; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.3rem 1.5rem; margin-top: 1.2rem; }
   label { display: block; font-size: .85rem; color: var(--muted); margin: .9rem 0 .25rem; font-family: system-ui, sans-serif; }
   input[type=file], input[type=password], input[type=text], select {

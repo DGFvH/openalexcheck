@@ -24,8 +24,8 @@
   /* One sans family throughout (matching the main page); the brand title is the
      only serif accent. */
   body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.5; }
-  header { max-width: min(1360px, 94%); margin: 0 auto; padding: 2.2rem 1.5rem 0.5rem; }
-  main { max-width: min(1360px, 94%); margin: 0 auto; padding: 0 1.5rem 4rem; }
+  header { max-width: min(1200px, 94%); margin: 0 auto; padding: 2.2rem 1.5rem 0.5rem; }
+  main { max-width: min(1200px, 94%); margin: 0 auto; padding: 0 1.5rem 4rem; }
   h1 { font-size: 1.7rem; margin: 0 0 .3rem; font-family: Georgia, "Times New Roman", serif; }
   h1 em { color: var(--accent); font-style: italic; }
   .header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
@@ -65,7 +65,7 @@
   .copy:hover { background: #ffffff33; }
   .field-label { font-family: system-ui, sans-serif; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: .6rem; }
   .note { font-family: system-ui, sans-serif; font-size: .86rem; background: #fbf7ec; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: .6rem .9rem; margin: .8rem 0; }
-  footer { max-width: min(1360px, 94%); margin: 0 auto; padding: 1.5rem; color: var(--muted); font-family: system-ui, sans-serif; font-size: .82rem; }
+  footer { max-width: min(1200px, 94%); margin: 0 auto; padding: 1.5rem; color: var(--muted); font-family: system-ui, sans-serif; font-size: .82rem; }
 </style>
 </head>
 <body>
@@ -133,7 +133,7 @@
       <p><span class="field-label">Detail description</span> — this is the instruction EduGenAI's assistant follows. Paste it verbatim:</p>
       <div class="codewrap"><pre id="c-detail">Use this extension to fact-check the reference list of an uploaded paper.
 
-TRIGGER. Treat any short go-ahead from the user - "start", "go", "run", "check", "verify", "check my citations", or a paper uploaded with no other instruction - as the signal to run all four steps below, end to end, on the paper already in the conversation. Do not ask clarifying questions first. If no paper has been provided yet, ask the user to upload or paste one, then proceed.
+WHEN TO RUN. Whenever the user uploads or pastes a paper and asks you to check, verify, or fact-check its citations or references - for example "check my citations", "verify the references", or simply "check" / "verify" once a paper is present - run all four steps below end to end by calling verify_references on that paper. Do NOT reply with a generic greeting or ask what they want to work on: a paper plus a check/verify request IS the instruction. If no paper has been provided yet, ask them to upload or paste one, then proceed.
 
 STEP 1 - EXTRACT. Read the document. For every entry in the reference list, pull out: title, the full list of author names in order, whether it ends in "et al.", year, DOI (only if printed), journal/venue, volume, issue, and page range. Also find the sentence(s) in the body where each source is cited, with one sentence of context on each side. Keep those citation sentences in your own working notes for Step 3 - do NOT send them to the function.
 
@@ -176,7 +176,7 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
       <p><span class="field-label">Function definition (name, description, JSON parameters)</span></p>
       <div class="codewrap"><pre id="c-schema">{
   "name": "verify_references",
-  "description": "Verify a list of bibliographic references against OpenAlex. For each reference, returns whether the work exists (found / fuzzy / not_found), a field-by-field comparison of the printed metadata (title, authors, year, journal, DOI, volume, issue, pages) against the real record, and the abstract of the matched work.",
+  "description": "Call this whenever the user wants to check, verify, or fact-check the citations or references in a paper. Verifies a list of bibliographic references against OpenAlex. For each reference, returns whether the work exists (found / fuzzy / not_found), a field-by-field comparison of the printed metadata (title, authors, year, journal, DOI, volume, issue, pages) against the real record, and the abstract of the matched work.",
   "parameters": {
     "type": "object",
     "properties": {
@@ -206,7 +206,8 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
     </li>
     <li>
       <h3>Submit and test</h3>
-      <p>Click <strong>Submit</strong>. Then, in an EduGenAI chat, upload a paper (or paste its reference list) and simply type <em>“start”</em> — the assistant will call your endpoint and return the verified table. Any short go-ahead works too (<em>“go”</em>, <em>“check my citations”</em>); the <em>Detail description</em> above tells the assistant to treat these as the run signal.</p>
+      <p>Click <strong>Submit</strong>. Then, in an EduGenAI chat, upload a paper (or paste its reference list) and ask it to check the citations — e.g. <em>“check the citations in this paper”</em> or <em>“verify the references”</em>. The assistant will call your endpoint and return the verified table.</p>
+      <div class="note"><strong>Why not just “start”?</strong> EduGenAI decides whether to call an extension from what you ask for. A bare “start” or “go” reads as a generic greeting, so it replies with “what would you like to work on?” instead of running the tool. A short request that names <em>citations</em> or <em>references</em> (“check my citations”) is what reliably triggers it.</div>
     </li>
   </ol>
 
