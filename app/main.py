@@ -299,6 +299,7 @@ def _display(res: dict) -> dict:
     misquote 'mismatch' as severity >= 80 as well (it isn't known server-side)."""
     status = res["status"]
     mism = [f for f in res.get("field_check", []) if f.get("status") == "mismatch"]
+    minor = [f for f in res.get("field_check", []) if f.get("status") == "close"]
     if status == "not_found":
         sev = 100
     elif status == "fuzzy":
@@ -312,7 +313,8 @@ def _display(res: dict) -> dict:
         sev = 0
     priority = "Review" if sev >= 70 else ("Check" if sev >= 45 else "")
     return {"badge": _STATUS_BADGE.get(status, status), "severity": sev,
-            "priority": priority, "mismatched_fields": [f["field"] for f in mism]}
+            "priority": priority, "mismatched_fields": [f["field"] for f in mism],
+            "minor_fields": [f["field"] for f in minor]}
 
 
 def _verify_response(res: dict) -> dict:

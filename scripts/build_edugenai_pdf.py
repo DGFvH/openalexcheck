@@ -63,8 +63,10 @@ Step 3 - do NOT send them to the function.
 
 STEP 2 - VERIFY. Call the "verify_references" function once, passing every
 reference. For each it returns: "badge" and "severity" (0-100), "status" (found /
-fuzzy / not_found / lookup_failed), "mismatched_fields", a "field_check" comparing
-each printed detail to OpenAlex (reference_value vs openalex_value), the matched
+fuzzy / not_found / lookup_failed), "mismatched_fields" and "minor_fields", a
+"field_check" comparing each printed detail to OpenAlex (reference_value vs
+openalex_value; each field's status is "match", "close" = a minor naming
+variation such as an abbreviated journal name, or "mismatch"), the matched
 "work" (authors, year, venue, doi, url) and its "abstract", and - for FUZZY
 matches only, where "work" is null and "field_check" is empty - a "candidates"
 array of the closest works (each with title, authors, year, venue, doi, url).
@@ -93,7 +95,9 @@ judge a reference to be a misquote MISMATCH, raise its severity to AT LEAST 80
 - Metadata issues: if "mismatched_fields" is empty, write "-". Otherwise, for each
   mismatched field take reference_value and openalex_value from "field_check" and
   write:  field: "printed" -> "OpenAlex".  Bold **authors** when it is one of them.
-  (A fuzzy row has no field_check yet - write "-".)
+  (A fuzzy row has no field_check yet - write "-".) Fields with status "close"
+  ("minor_fields") are NOT errors - leave them out of this column, or mention
+  them only as "minor naming variant" without a flag.
 - Misquote: Mismatch (red) / Likely mismatch (amber) / Consistent (green) /
   Unclear (dash), plus a 6-10 word reason. (Only "found" rows have a misquote.)
 - What the paper is about: one short clause from the "work" abstract, or "-".
@@ -169,6 +173,7 @@ RESP = """{
     "severity": 85,
     "priority": "Review",
     "mismatched_fields": ["authors", "year", "journal"],
+    "minor_fields": [],
     "work": {
       "title": "Highly accurate protein structure prediction with AlphaFold",
       "authors": ["John Jumper", "Richard Evans", "..."],

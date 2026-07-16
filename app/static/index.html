@@ -75,7 +75,12 @@
   .badge.match { background: var(--ok); } .badge.likely_mismatch { background: var(--warn); }
   .badge.mismatch { background: var(--bad); } .badge.unclear { background: var(--info); }
   .ref { border: 1px solid var(--border); border-radius: 8px; padding: .9rem 1.1rem; margin-top: .9rem; background: #fff; }
-  .ref .raw { font-size: .92rem; margin: .35rem 0 .2rem; }
+  .ref .raw { font-size: .9rem; background: var(--bg); border-left: 3px solid #cfc9bb; border-radius: 4px; padding: .5rem .8rem; margin: .4rem 0 0; }
+  .sect { border-top: 1px solid var(--border); margin-top: .85rem; padding-top: .7rem; }
+  .sect-title { margin: 0 0 .45rem; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+  .sect-title .hint { font-weight: 400; text-transform: none; letter-spacing: 0; }
+  .ref-head { display: flex; align-items: center; gap: .2rem; }
+  .ref-head .refno { margin-left: auto; font-size: .75rem; color: var(--muted); }
   .meta, .note { font-family: system-ui, sans-serif; font-size: .8rem; color: var(--muted); margin-top: .25rem; }
   .note { color: #8a5a12; }
   .compare { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; margin-top: .7rem; }
@@ -98,7 +103,9 @@
   .fields td { padding: .25rem .5rem .25rem 0; border-top: 1px solid var(--border); vertical-align: top; }
   .fields td.f-status { white-space: nowrap; }
   .fields .fs-match { color: var(--ok); } .fields .fs-mismatch { color: var(--bad); font-weight: 600; } .fields .fs-unverifiable { color: var(--info); }
+  .fields .fs-close { color: #8a5a12; font-weight: 600; }
   .fields tr.row-mismatch td { background: #fbf1ef; }
+  .fields tr.row-close td { background: #faf5e6; }
   .field-note { font-family: system-ui, sans-serif; font-size: .82rem; margin-top: .5rem; }
   .field-note.bad { color: var(--bad); } .field-note.ok { color: var(--ok); }
   details.abstract { margin-top: .5rem; font-size: .85rem; }
@@ -339,24 +346,25 @@ const SAMPLE = [
       abstract_summary: "Founds information theory: defines entropy and channel capacity and the limits of compression and transmission." },
   },
   {
-    reference: { id: 2, raw: "Solow, R. M. (1957). Technical change and the aggregate production function. The Review of Economics and Statistics, 39(3), 312–320.",
-      title: "Technical Change and the Aggregate Production Function", authors: ["Solow, R. M."], year: 1957,
-      doi: "10.2307/1926047", container: "The Review of Economics and Statistics", volume: "39", issue: "3", pages: "312-320",
-      contexts: ["Solow (1957) showed that labour productivity rises chiefly because workers become more skilled over time."] },
+    reference: { id: 2, raw: "Mehrabian, A., & Ferris, S. R. (1967). Inference of attitudes from nonverbal communication in two channels. Journal of Consulting Psychology, 31(3), 248–252.",
+      title: "Inference of attitudes from nonverbal communication in two channels", authors: ["Mehrabian, A.", "Ferris, S. R."], year: 1967,
+      doi: "10.1037/h0024648", container: "Journal of Consulting Psychology", volume: "31", issue: "3", pages: "248-252",
+      contexts: ["It is well established that 93% of all human communication is nonverbal (Mehrabian & Ferris, 1967), so written channels lose most of a message's meaning."] },
     status: "found", candidates: [], notes: [], field_mismatch_count: 0,
-    work: { title: "Technical Change and the Aggregate Production Function", authors: ["Robert M. Solow"], year: 1957,
-      venue: "The Review of Economics and Statistics", volume: "39", issue: "3", pages: "312-320", doi: "10.2307/1926047",
-      url: "https://doi.org/10.2307/1926047",
-      abstract: "This paper separates shifts in the aggregate production function (technical change) from movements along it caused by changes in capital per worker. It finds that the greater part of the growth in output per worker is attributable to technical change rather than to capital deepening." },
+    work: { title: "Inference of attitudes from nonverbal communication in two channels", authors: ["Albert Mehrabian", "Susan R. Ferris"], year: 1967,
+      venue: "Journal of Consulting Psychology", volume: "31", issue: "3", pages: "248-252", doi: "10.1037/h0024648",
+      url: "https://doi.org/10.1037/h0024648",
+      abstract: "Two experiments examined the relative contributions of facial and vocal cues to judgments of a speaker's attitude. When facial and vocal expressions were inconsistent, judgments of liking were a weighted combination of the two channels, with facial cues carrying about one and a half times the weight of vocal cues. The findings concern inferences of attitude from single spoken words in a laboratory setting." },
     field_check: [
-      { field: "title", status: "match", reference_value: "Technical change and the aggregate production function", openalex_value: "Technical Change and the Aggregate Production Function" },
-      { field: "authors", status: "match", reference_value: "Solow, R. M.", openalex_value: "Robert M. Solow" },
-      { field: "year", status: "match", reference_value: 1957, openalex_value: 1957 },
-      { field: "journal", status: "match", reference_value: "The Review of Economics and Statistics", openalex_value: "The Review of Economics and Statistics" },
-      { field: "pages", status: "match", reference_value: "312-320", openalex_value: "312-320" } ],
-    misquote: { id: 2, verdict: "mismatch", explanation: "The student cites this as direct evidence about labour productivity and worker skill, but the paper's subject is aggregate technical change (total factor productivity) — a different concept.",
-      paper_topic: "aggregate technical change / total factor productivity", student_usage: "growth in labour productivity from worker skill",
-      abstract_summary: "Decomposes output-per-worker growth into capital deepening versus technical change, attributing most of it to technical change." },
+      { field: "title", status: "match", reference_value: "Inference of attitudes from nonverbal communication in two channels", openalex_value: "Inference of attitudes from nonverbal communication in two channels" },
+      { field: "authors", status: "match", reference_value: "Mehrabian, A., Ferris, S. R.", openalex_value: "Albert Mehrabian, Susan R. Ferris" },
+      { field: "year", status: "match", reference_value: 1967, openalex_value: 1967 },
+      { field: "doi", status: "match", reference_value: "10.1037/h0024648", openalex_value: "10.1037/h0024648" },
+      { field: "journal", status: "match", reference_value: "Journal of Consulting Psychology", openalex_value: "Journal of Consulting Psychology" },
+      { field: "pages", status: "match", reference_value: "248-252", openalex_value: "248-252" } ],
+    misquote: { id: 2, verdict: "mismatch", explanation: "The paper measured how listeners infer a speaker's ATTITUDE from facial vs vocal cues for single spoken words in a lab. It does not support the sweeping claim that 93% of all human communication is nonverbal — a famous misreading of this study.",
+      paper_topic: "inferring attitude from facial vs vocal cues", student_usage: "93% of all communication is nonverbal",
+      abstract_summary: "Lab study of how a speaker's attitude is inferred from facial versus vocal cues for single spoken words — the source of the often-misused “7%–38%–55%” rule." },
   },
   {
     reference: { id: 3, raw: "He, K., Zhang, X., Ren, S., & Sun, J. (2015). Deep residual learning for image recognition. arXiv preprint arXiv:1512.03385.",
@@ -389,7 +397,7 @@ const SAMPLE = [
       { field: "title", status: "match", reference_value: "Attention is all you need", openalex_value: "Attention Is All You Need" },
       { field: "authors", status: "match", reference_value: "Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J.", openalex_value: "Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit…" },
       { field: "year", status: "match", reference_value: 2017, openalex_value: 2017 },
-      { field: "journal", status: "match", reference_value: "Advances in Neural Information Processing Systems", openalex_value: "Neural Information Processing Systems" } ],
+      { field: "journal", status: "close", reference_value: "Advances in Neural Information Processing Systems", openalex_value: "Neural Information Processing Systems", detail: "one name contains the other" } ],
     misquote: { id: 4, verdict: "match", explanation: "Consistent with the abstract's claim that attention alone can replace recurrence.",
       paper_topic: "attention-based sequence transduction", student_usage: "attention replaces recurrence",
       abstract_summary: "Introduces the Transformer, a model built entirely on attention that dispenses with recurrence and convolutions." },
@@ -656,24 +664,35 @@ function sevChip(r) {
 
 function refHeader(r) {
   const ref = r.reference;
-  return `<span class="badge ${r.status}">${STATUS_LABEL[r.status]}</span>${sevChip(r)}
-    <div class="raw">${esc(ref.raw || ref.title || "(unlabelled reference)")}</div>`;
+  return `<div class="ref-head"><span class="badge ${r.status}">${STATUS_LABEL[r.status]}</span>${sevChip(r)}
+      <span class="refno">Ref #${ref.id}</span></div>
+    <div class="sect" style="border-top:0;padding-top:.5rem;margin-top:0">
+      <h4 class="sect-title">Reference — as printed in the paper</h4>
+      <div class="raw">${esc(ref.raw || ref.title || "(unlabelled reference)")}</div>
+    </div>`;
 }
 
 const FIELD_LABEL = { title: "Title", authors: "Authors", year: "Year", doi: "DOI",
   journal: "Journal", volume: "Volume", issue: "Issue", pages: "Pages" };
+const FIELD_STATUS_LABEL = { match: "match", close: "minor difference", mismatch: "mismatch", unverifiable: "unverifiable" };
 
 function renderFieldCheck(r) {
   const fields = r.field_check || [];
   if (r.status !== "found" || !fields.length) return "";
   const mism = fields.filter(f => f.status === "mismatch");
-  const head = mism.length
-    ? `<div class="field-note bad">⚠ Metadata mismatch on ${mism.map(f => FIELD_LABEL[f.field] || f.field).join(", ")} — the work exists, but these printed details differ from the OpenAlex record.</div>`
-    : `<div class="field-note ok">✓ Title, authors, year, and other printed details match the OpenAlex record.</div>`;
+  const close = fields.filter(f => f.status === "close");
+  let head;
+  if (mism.length) {
+    head = `<div class="field-note bad">⚠ Mismatch on ${mism.map(f => FIELD_LABEL[f.field] || f.field).join(", ")} — the work exists, but these printed details differ from the OpenAlex record.</div>`;
+  } else if (close.length) {
+    head = `<div class="field-note ok">✓ Printed details match the OpenAlex record, with ${close.length} minor naming variation${close.length > 1 ? "s" : ""} (${close.map(f => FIELD_LABEL[f.field] || f.field).join(", ")} — see table).</div>`;
+  } else {
+    head = `<div class="field-note ok">✓ Title, authors, year, and other printed details match the OpenAlex record.</div>`;
+  }
   const rows = fields.map(f => `
-    <tr class="${f.status === "mismatch" ? "row-mismatch" : ""}">
+    <tr class="${f.status === "mismatch" ? "row-mismatch" : f.status === "close" ? "row-close" : ""}">
       <td>${FIELD_LABEL[f.field] || f.field}</td>
-      <td class="f-status fs-${f.status}">${f.status}</td>
+      <td class="f-status fs-${f.status}">${FIELD_STATUS_LABEL[f.status] || f.status}</td>
       <td>${esc(f.reference_value ?? "—")}</td>
       <td>${esc(f.openalex_value ?? "—")}</td>
     </tr>`).join("");
@@ -683,33 +702,33 @@ function renderFieldCheck(r) {
     <tbody>${rows}</tbody></table></details>`;
 }
 
-function renderAbstract(r) {
-  if (r.status !== "found" || !r.work) return "";
-  const summary = r.misquote && r.misquote.abstract_summary;
-  const abstract = r.work.abstract;
-  let html = "";
-  if (summary) html += `<div class="summary-line"><strong>What this paper is about:</strong> ${esc(summary)}</div>`;
-  if (abstract) {
-    html += `<details class="abstract"><summary>OpenAlex abstract</summary><p>${esc(abstract)}</p></details>`;
-  } else if (r.status === "found") {
-    html += `<div class="meta">OpenAlex has no abstract for this work.</div>`;
-  }
-  return html;
-}
-
-function renderResult(r) {
+function renderSourceCheck(r) {
   const notes = (r.notes || []).filter(n => !/Metadata mismatch/.test(n))
     .map(n => `<div class="note">⚠ ${esc(n)}</div>`).join("");
   let workLine = "";
   if (r.work) {
-    workLine = `<div class="meta">Matched: <a href="${esc(r.work.url)}" target="_blank" rel="noopener">${esc(r.work.title)}</a>
+    workLine = `<div class="meta">Found in OpenAlex: <a href="${esc(r.work.url)}" target="_blank" rel="noopener">${esc(r.work.title)}</a>
       (${esc(r.work.year ?? "?")}) — ${esc((r.work.authors || []).slice(0, 3).join(", "))}${r.work.venue ? " · " + esc(r.work.venue) : ""}</div>`;
   }
-  return `<div class="ref" id="ref-${r.reference.id}">
-    ${refHeader(r)} ${workLine}
-    ${r.status === "fuzzy" ? '<div class="meta">See the “Fuzzy matches” screen to pick the right work.</div>' : notes}
+  // Plain-language abstract dropdown lives with the source data when the
+  // misquote check is off (otherwise it sits in the usage comparison below).
+  let abstractBit = "";
+  if (!DATA.checks.misquote && r.status === "found" && r.work && r.work.abstract) {
+    abstractBit = `<details class="abstract"><summary>OpenAlex abstract</summary><p>${esc(r.work.abstract)}</p></details>`;
+  }
+  return `<div class="sect">
+    <h4 class="sect-title">1 · Source check <span class="hint">— does the reference exist, and do the printed details match?</span></h4>
+    ${workLine}
+    ${r.status === "fuzzy" ? '<div class="meta">Close candidates exist but none is an exact match — see the “Fuzzy matches” screen to pick the right work.</div>' : notes}
     ${renderFieldCheck(r)}
-    ${renderAbstract(r)}
+    ${abstractBit}
+  </div>`;
+}
+
+function renderResult(r) {
+  return `<div class="ref" id="ref-${r.reference.id}">
+    ${refHeader(r)}
+    ${renderSourceCheck(r)}
     ${renderMisquote(r)}
   </div>`;
 }
@@ -718,25 +737,34 @@ function renderMisquote(r) {
   if (!DATA.checks.misquote) return `<div class="misquote"></div>`;
   const m = r.misquote;
   const contexts = r.reference.contexts || [];
-  const target = `<div class="misquote" id="mq-${r.reference.id}">`;
+  const open = `<div class="sect misquote" id="mq-${r.reference.id}">
+    <h4 class="sect-title">2 · Usage check <span class="hint">— is the source cited for what it actually says?</span></h4>`;
   if (!m) {
     if (r.status === "found" && !FINALIZED)
-      return target + `<div class="meta">⏳ Comparing citation context against the abstract…</div></div>`;
+      return open + `<div class="meta">⏳ Comparing the citation context against the abstract…</div></div>`;
     if (r.status === "found")
-      return target + `<div class="meta">Misquote check unavailable for this reference.</div></div>`;
-    return target + `</div>`;
+      return open + `<div class="meta">Usage check unavailable for this reference.</div></div>`;
+    return open + `<div class="meta">Only run for verified references.</div></div>`;
   }
-  return target + misquoteBlock(m, contexts) + `</div>`;
+  return open + misquoteBlock(m, contexts, r.work && r.work.abstract) + `</div>`;
 }
 
-function misquoteBlock(m, contexts) {
+function misquoteBlock(m, contexts, abstract) {
   let html = `<div class="verdict"><span class="badge ${m.verdict}">${VERDICT_LABEL[m.verdict]}</span> ${esc(m.explanation || "")}</div>`;
   if (m.paper_topic || m.student_usage) {
-    html += `<div class="meta">Paper is about: <strong>${esc(m.paper_topic || "?")}</strong> · Student uses it as: <strong>${esc(m.student_usage || "?")}</strong></div>`;
+    html += `<div class="meta" style="margin-top:.35rem">Student cites it as: <strong>${esc(m.student_usage || "?")}</strong> · Paper is actually about: <strong>${esc(m.paper_topic || "?")}</strong></div>`;
   }
-  html += `<div class="box" style="margin-top:.5rem"><h4>Student's citation context</h4>${
-    contexts.length ? contexts.map(c => `<p>“${esc(c)}”</p>`).join("") : "<p class='meta'>Not cited in the body text.</p>"
-  }</div>`;
+  const left = contexts.length
+    ? contexts.map(c => `<p>“${esc(c)}”</p>`).join("")
+    : "<p class='meta'>Not cited in the body text.</p>";
+  let right = "";
+  if (m.abstract_summary) right += `<p>${esc(m.abstract_summary)}</p>`;
+  if (abstract) right += `<details class="abstract"><summary>Full OpenAlex abstract</summary><p>${esc(abstract)}</p></details>`;
+  if (!right) right = "<p class='meta'>No abstract available in OpenAlex.</p>";
+  html += `<div class="compare">
+    <div class="box"><h4>In the student's paper</h4>${left}</div>
+    <div class="box"><h4>What the paper is about</h4>${right}</div>
+  </div>`;
   return html;
 }
 

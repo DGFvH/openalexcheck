@@ -13,8 +13,10 @@ import re
 from difflib import SequenceMatcher
 from typing import Optional
 
-# Per-field status: "match" | "mismatch" | "missing" (in reference) | "unverifiable"
-# (not present in OpenAlex). Severity weights let the UI rank problems.
+# Per-field status: "match" | "close" (minor variation, e.g. an abbreviated or
+# partial journal name — shown but never counted as a problem) | "mismatch" |
+# "unverifiable" (not present in OpenAlex). Severity weights let the UI rank
+# problems; only "mismatch" contributes.
 FIELD_SEVERITY = {
     "authors": 9,
     "doi": 8,
@@ -110,10 +112,15 @@ def compare_fields(ref: dict, work: dict) -> list[dict]:
     (informational) rather than a mismatch."""
     fields: list[dict] = []
 
-    # Title
+    # Title — near-identical is a "close" (minor difference), not a clean match.
     if ref.get("title") and work.get("title"):
         sim = _similar(ref["title"], work["title"])
-        status = "match" if sim >= 0.9 else ("mismatch" if sim < 0.7 else "match")
+        if sim >= 0.95:
+            status = "match"
+        elif sim >= 0.70:
+            status = "close"
+        else:
+            status = "mismatch"
         fields.append({"field": "title", "status": status,
                        "reference_value": ref["title"], "openalex_value": work["title"],
                        "detail": f"title similarity {sim:.2f}"})
@@ -142,12 +149,23 @@ def compare_fields(ref: dict, work: dict) -> list[dict]:
                        "reference_value": rd, "openalex_value": None,
                        "detail": "OpenAlex has no DOI for this work."})
 
-    # Journal / venue
+    # Journal / venue — name variants ("Advances in Neural Information Processing
+    # Systems" vs "Neural Information Processing Systems", abbreviations, a
+    # leading "The") are a minor difference, not a clean match and not an error.
     if ref.get("container") and work.get("venue"):
+        na, nb = _norm(ref["container"]), _norm(work["venue"])
         sim = _similar(ref["container"], work["venue"])
-        fields.append({"field": "journal", "status": "match" if sim >= 0.6 else "mismatch",
+        contained = bool(na and nb) and (na in nb or nb in na)
+        if na == nb or sim >= 0.93:
+            status = "match"
+        elif contained or sim >= 0.55:
+            status = "close"
+        else:
+            status = "mismatch"
+        fields.append({"field": "journal", "status": status,
                        "reference_value": ref["container"], "openalex_value": work["venue"],
-                       "detail": f"venue similarity {sim:.2f}"})
+                       "detail": f"venue similarity {sim:.2f}"
+                                 + (" (one name contains the other)" if contained and status == "close" else "")})
 
     # Volume / issue
     for key in ("volume", "issue"):

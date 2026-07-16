@@ -263,3 +263,37 @@ def test_display_matches_site_severity():
     assert d3["severity"] == 8 and d3["priority"] == ""
     # lookup_failed -> 35, never treated as hallucination
     assert _display({"status": "lookup_failed"})["severity"] == 35
+
+
+def test_journal_variants_are_close_not_match():
+    from app.fieldcheck import compare_fields, field_mismatches
+    ref = {"title": "Attention is all you need", "authors": ["Vaswani, A."], "et_al": True,
+           "year": 2017, "doi": None,
+           "container": "Advances in Neural Information Processing Systems"}
+    work = {"title": "Attention Is All You Need", "authors_full": ["Ashish Vaswani"],
+            "year": 2017, "doi": None, "venue": "Neural Information Processing Systems"}
+    fields = {f["field"]: f for f in compare_fields(ref, work)}
+    # containment/high-similarity venue variant -> "close", never a clean match
+    assert fields["journal"]["status"] == "close"
+    # and never counted as a mismatch (no severity impact)
+    assert "journal" not in {f["field"] for f in field_mismatches(compare_fields(ref, work))}
+    # a leading "The" is trivial enough to stay a full match
+    ref2 = dict(ref, container="The Review of Economics and Statistics")
+    work2 = dict(work, venue="Review of Economics and Statistics")
+    fields2 = {f["field"]: f for f in compare_fields(ref2, work2)}
+    assert fields2["journal"]["status"] == "match"
+    # a genuinely different venue is still a mismatch
+    ref3 = dict(ref, container="Science")
+    work3 = dict(work, venue="IEEE Conference on Computer Vision and Pattern Recognition")
+    fields3 = {f["field"]: f for f in compare_fields(ref3, work3)}
+    assert fields3["journal"]["status"] == "mismatch"
+
+
+def test_display_exposes_minor_fields():
+    from app.main import _display
+    d = _display({"status": "found", "field_check": [
+        {"field": "journal", "status": "close"},
+        {"field": "title", "status": "match"}]})
+    assert d["minor_fields"] == ["journal"]
+    assert d["mismatched_fields"] == []
+    assert d["severity"] == 8  # minor variations don't raise severity
