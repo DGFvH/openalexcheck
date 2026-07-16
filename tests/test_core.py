@@ -46,6 +46,8 @@ def test_search_query_keeps_apostrophes():
     assert "don't" in q                      # apostrophe survives
     assert "," not in q and ":" not in q     # filter syntax stripped
     assert _search_query("A & B | C") == "A B C"
+    assert _search_query("Memory bias?") == "Memory bias"   # '?' causes an API 400
+    assert _search_query("Self-attention models") == "Self-attention models"
     assert _search_query("") == ""
 
 

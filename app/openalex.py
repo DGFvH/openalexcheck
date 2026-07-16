@@ -153,33 +153,30 @@ def _get_work_by_doi(client: httpx.Client, doi: str) -> Optional[dict]:
     return resp.json()
 
 
+# Word-internal punctuation stays: the search index treats "don't" as ONE
+# token, so sending "don t"/"dont" matches nothing and a real work gets
+# falsely flagged as a potential hallucination. Everything else becomes a
+# space — commas/colons/pipes/ampersands are OpenAlex filter syntax, and a
+# stray "?" makes the API return a 400.
+_SEARCH_PUNCT_TABLE = str.maketrans(
+    {c: " " for c in string.punctuation if c not in "'-"})
+
+
 def _search_query(title: str) -> str:
-    """Title as a title.search value: strip only the characters that are
-    OpenAlex filter syntax (comma/colon separate filters, pipe/ampersand are
-    OR/AND). Apostrophes MUST survive — the search index treats "don't" as one
-    token, so "don t"/"dont" match nothing and a real work would be flagged as
-    a potential hallucination."""
-    cleaned = (title or "").translate(str.maketrans({c: " " for c in ",:|&"}))
-    return " ".join(cleaned.split())
+    return " ".join((title or "").translate(_SEARCH_PUNCT_TABLE).split())
 
 
 def _search_works_by_title(client: httpx.Client, title: str, per_page: int = 6) -> list[dict]:
-    safe = _search_query(title)
-    if not safe:
-        return []
-    resp = _get(client, "/works", params={"filter": f"title.search:{safe}", "per-page": per_page})
-    if resp.status_code >= 400:
-        return []
-    results = resp.json().get("results", [])
-    if results:
-        return results
-    # Fallback: the fully-normalized form (all punctuation stripped) —
-    # occasionally rescues titles whose other punctuation confuses the index.
-    fallback = normalize_title(title)
-    if fallback and fallback != safe.lower():
-        resp = _get(client, "/works", params={"filter": f"title.search:{fallback}", "per-page": per_page})
-        if resp.status_code < 400:
-            return resp.json().get("results", [])
+    # Try the apostrophe-preserving query first; fall back to the fully
+    # normalized form on ANY failure (error status or zero hits).
+    queries = [q for q in dict.fromkeys([_search_query(title), normalize_title(title)]) if q]
+    for q in queries:
+        resp = _get(client, "/works", params={"filter": f"title.search:{q}", "per-page": per_page})
+        if resp.status_code >= 400:
+            continue
+        results = resp.json().get("results", [])
+        if results:
+            return results
     return []
 
 
