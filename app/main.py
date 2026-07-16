@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -184,12 +185,18 @@ async def _run_stream(*, llm, text, openalex_key, check_hallucination,
             emit(None)  # sentinel: worker finished
 
     task = loop.run_in_executor(None, worker)
+    # A padded first line forces intermediary proxies/gzip buffers to flush
+    # early, so the browser starts receiving events immediately instead of only
+    # after the whole (long) analysis is buffered up.
+    yield json.dumps({"type": "ready", "_pad": " " * 2048}) + "\n"
+    start = time.monotonic()
     try:
         while True:
             try:
-                obj = await asyncio.wait_for(queue.get(), timeout=10.0)
+                obj = await asyncio.wait_for(queue.get(), timeout=2.0)
             except asyncio.TimeoutError:
-                yield json.dumps({"type": "heartbeat"}) + "\n"
+                # Visible liveness during the long, opaque extraction call.
+                yield json.dumps({"type": "tick", "elapsed": int(time.monotonic() - start)}) + "\n"
                 continue
             if obj is None:
                 break
@@ -277,9 +284,41 @@ def _trim_abstract(work: Optional[dict]) -> Optional[dict]:
     return w
 
 
+# Same field weights and status labels the web UI uses, so an extension renders
+# results identically to the site (severity-sorted, badged).
+_FIELD_WEIGHT = {"authors": 9, "doi": 8, "title": 8, "year": 6,
+                 "pages": 4, "journal": 4, "volume": 3, "issue": 2}
+_STATUS_BADGE = {"found": "Verified", "fuzzy": "Fuzzy match",
+                 "not_found": "Potential hallucination", "lookup_failed": "Lookup failed"}
+
+
+def _display(res: dict) -> dict:
+    """Precompute the site's badge / severity / priority so the calling model
+    doesn't have to (keeps ordering and labels consistent with the web UI).
+    Severity here is existence + metadata only; the model should treat a
+    misquote 'mismatch' as severity >= 80 as well (it isn't known server-side)."""
+    status = res["status"]
+    mism = [f for f in res.get("field_check", []) if f.get("status") == "mismatch"]
+    if status == "not_found":
+        sev = 100
+    elif status == "fuzzy":
+        sev = 60
+    elif status == "lookup_failed":
+        sev = 35
+    elif status == "found":
+        maxw = max((_FIELD_WEIGHT.get(f["field"], 3) for f in mism), default=0)
+        sev = 85 if maxw >= 8 else 70 if maxw >= 6 else 50 if maxw > 0 else 8
+    else:
+        sev = 0
+    priority = "Review" if sev >= 70 else ("Check" if sev >= 45 else "")
+    return {"badge": _STATUS_BADGE.get(status, status), "severity": sev,
+            "priority": priority, "mismatched_fields": [f["field"] for f in mism]}
+
+
 def _verify_response(res: dict) -> dict:
     return {
         "status": res["status"],
+        **_display(res),
         "work": _trim_abstract(res.get("work")),
         "field_check": res.get("field_check", []),
         "field_mismatch_count": res.get("field_mismatch_count", 0),

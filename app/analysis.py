@@ -65,7 +65,10 @@ You check whether a student's use of a cited source matches what that source is
 actually about, based on the source's abstract. Be strict about topical scope:
 for example, if the abstract is about macroeconomic productivity but the student
 cites it as evidence about labour productivity specifically, that is a mismatch.
-Respond with a single JSON object only — no prose, no markdown fences."""
+When the topic genuinely does not line up, say so plainly and flag it for review
+— do not soften a real mismatch into "consistent". At the same time, do not
+invent problems: if the citation is a reasonable use of the source, call it a
+match. Respond with a single JSON object only — no prose, no markdown fences."""
 
 COMPARE_PROMPT = """\
 For each item below, compare the student's citation context(s) with the
@@ -76,8 +79,14 @@ Verdicts:
 - "match": the context is consistent with the abstract's topic and claims.
 - "likely_mismatch": the topic or claim is noticeably different or narrower/broader
   than what the abstract supports (e.g. wrong sub-field, wrong direction of effect).
-- "mismatch": the context clearly attributes something the abstract does not cover.
+- "mismatch": the context clearly attributes something the abstract does not cover,
+  or uses the source for a topic it is not about. This SHOULD be looked at.
 - "unclear": the contexts are too vague or the abstract too short to judge.
+
+For "mismatch" and "likely_mismatch", write the "explanation" as a direct,
+reviewer-facing flag: state what the source is actually about and what the
+student is using it for, so a marker can see at a glance why it needs checking.
+Do not hedge a clear topical mismatch into "match".
 
 Return JSON with exactly this shape:
 {

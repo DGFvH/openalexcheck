@@ -13,11 +13,22 @@
     --ok: #1f6f5c; --warn: #b07d18; --bad: #b3392f; --info: #4a5f8a;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font-family: Georgia, "Times New Roman", serif; background: var(--bg); color: var(--ink); }
+  /* One font family throughout (system sans) for consistency and readability;
+     the brand title is the only serif accent. */
+  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.5; }
   header { padding: 2.2rem 1.5rem 1rem; max-width: 960px; margin: 0 auto; }
-  h1 { font-size: 1.7rem; margin: 0 0 .3rem; }
+  h1 { font-size: 1.7rem; margin: 0 0 .3rem; font-family: Georgia, "Times New Roman", serif; }
   h1 em { color: var(--accent); font-style: italic; }
   .sub { color: var(--muted); margin: 0; font-size: .95rem; }
+  .sub-muted { color: var(--muted); opacity: .8; font-size: .88rem; }
+  .header-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+  .credit { text-align: right; font-family: system-ui, sans-serif; font-size: .8rem; color: var(--muted); }
+  .credit-name { display: block; margin-bottom: .2rem; }
+  .credit-links { display: inline-flex; gap: .5rem; justify-content: flex-end; }
+  .credit-links a { color: var(--muted); display: inline-flex; transition: color .15s; }
+  .credit-links a:hover { color: var(--accent); }
+  button.stop { margin-top: 1.3rem; margin-left: .6rem; background: #fff; color: var(--bad); border: 1px solid var(--bad); border-radius: 6px; padding: .65rem 1.2rem; font: inherit; font-family: system-ui, sans-serif; font-size: .95rem; cursor: pointer; }
+  button.stop:hover { background: var(--bad); color: #fff; }
   main { max-width: 960px; margin: 0 auto; padding: 0 1.5rem 4rem; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.3rem 1.5rem; margin-top: 1.2rem; }
   label { display: block; font-size: .85rem; color: var(--muted); margin: .9rem 0 .25rem; font-family: system-ui, sans-serif; }
@@ -100,10 +111,29 @@
 </head>
 <body>
 <header>
-  <h1>Citation Checker <em>· OpenAlex</em></h1>
+  <div class="header-top">
+    <h1>Citation Checker <em>· OpenAlex</em></h1>
+    <div class="credit">
+      <span class="credit-name">© Daniël van Hemert</span>
+      <span class="credit-links">
+        <a href="https://danielvanhemert.com" target="_blank" rel="noopener" title="danielvanhemert.com" aria-label="Website">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm6.9 6h-2.5a15.6 15.6 0 00-1.3-3.4A8 8 0 0118.9 8zM12 4c.7 1 1.3 2.3 1.7 4h-3.4c.4-1.7 1-3 1.7-4zM4.3 14a8 8 0 010-4h2.9a17 17 0 000 4H4.3zm.8 2h2.5c.3 1.2.8 2.4 1.3 3.4A8 8 0 015.1 16zm2.5-8H5.1a8 8 0 013.8-3.4C8.4 5.6 7.9 6.8 7.6 8zM12 20c-.7-1-1.3-2.3-1.7-4h3.4c-.4 1.7-1 3-1.7 4zm2.1-6H9.9a15 15 0 010-4h4.2a15 15 0 010 4zm.8 5.4c.5-1 1-2.2 1.3-3.4h2.5a8 8 0 01-3.8 3.4zM16.8 14a17 17 0 000-4h2.9a8 8 0 010 4h-2.9z"/></svg>
+        </a>
+        <a href="https://www.linkedin.com/in/dani%C3%ABl-van-hemert-72560a12b/" target="_blank" rel="noopener" title="LinkedIn" aria-label="LinkedIn">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 3a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h14zM8.34 18.34V9.9H5.67v8.44h2.67zM7 8.67a1.55 1.55 0 100-3.1 1.55 1.55 0 000 3.1zm11.34 9.67v-4.63c0-2.48-1.33-3.63-3.1-3.63a2.68 2.68 0 00-2.42 1.33V9.9h-2.67c.04.75 0 8.44 0 8.44h2.67v-4.71c0-.24.02-.48.09-.65.19-.48.63-.98 1.37-.98.97 0 1.36.74 1.36 1.82v4.52h2.7z"/></svg>
+        </a>
+        <a href="https://scholar.google.com/citations?user=JcqW6DD9dlEC&hl=nl" target="_blank" rel="noopener" title="Google Scholar" aria-label="Google Scholar">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2L1 8l11 6 9-4.91V17h2V8L12 2zM5 13.18v3.5L12 20l7-3.32v-3.5L12 17l-7-3.82z"/></svg>
+        </a>
+        <a href="https://orcid.org/0000-0002-1391-1714" target="_blank" rel="noopener" title="ORCID" aria-label="ORCID">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zM8.2 6.9a1 1 0 110 2 1 1 0 010-2zM7.3 10h1.8v7.6H7.3V10zm3.5 0h3.3c3.1 0 4.5 2.2 4.5 3.8 0 1.8-1.4 3.8-4.5 3.8h-3.3V10zm1.8 1.6v4.4h1.3c1.9 0 2.6-1.3 2.6-2.2 0-1.4-.9-2.2-2.6-2.2h-1.3z"/></svg>
+        </a>
+      </span>
+    </div>
+  </div>
   <p class="sub">Upload a student paper (PDF or DOCX). Every reference is looked up in OpenAlex;
   citation contexts are compared against the real abstracts using your own LLM API key.</p>
-  <p class="sub" style="margin-top:.4rem">Using EduGenAI? Follow <a href="/edugenai">these instructions</a> to add this as an extension (with a downloadable PDF).</p>
+  <p class="sub" style="margin-top:.4rem">Using EduGenAI? Follow <a href="/edugenai">these instructions</a> to add this as an extension (with a downloadable PDF). <span class="sub-muted">[Using a different tool? Contact me using one of the links above and I'll add instructions for it.]</span></p>
 </header>
 <main>
   <div class="card" id="form-card">
@@ -157,6 +187,7 @@
       </ul>
     </details>
     <button class="primary" id="run">Run checks</button>
+    <button class="stop hidden" id="stop">■ Stop</button>
     <div class="progress-panel hidden" id="progress-panel">
       <div class="progress-head">
         <span class="dot"></span>
@@ -234,6 +265,7 @@ const STATUS_LABEL = { found: "Verified", fuzzy: "Fuzzy match", not_found: "Pote
 const VERDICT_LABEL = { match: "Consistent", likely_mismatch: "Likely mismatch", mismatch: "Mismatch", unclear: "Unclear" };
 
 $("run").addEventListener("click", runAnalysis);
+$("stop").addEventListener("click", stopAnalysis);
 $("provider").addEventListener("change", populateModels);
 $("model_select").addEventListener("change", onModelChange);
 $("tab-results").addEventListener("click", () => switchTab("results"));
@@ -250,7 +282,23 @@ function switchTab(name) {
 }
 
 let FINALIZED = false;
+let ABORT = null;          // AbortController for the in-flight analysis
+let STATUS_BASE = "";      // current status text, without the elapsed suffix
 const CARDS = {}; // reference id -> card element, for live patching
+
+function setStatus(msg) { STATUS_BASE = msg; $("progress-status").textContent = msg; }
+
+function stopAnalysis() {
+  if (ABORT) { ABORT.abort(); ABORT = null; }
+}
+
+function endRunUI() {
+  $("run").disabled = false;
+  $("run").classList.remove("hidden");
+  $("stop").classList.add("hidden");
+  const dot = $("progress-panel").querySelector(".dot");
+  if (dot) dot.style.animationPlayState = "paused";
+}
 
 async function runAnalysis() {
   const file = $("file").files[0];
@@ -276,17 +324,20 @@ async function runAnalysis() {
   FINALIZED = false;
   for (const k in CARDS) delete CARDS[k];
   $("run").disabled = true;
+  $("run").classList.add("hidden");
+  $("stop").classList.remove("hidden");
   $("results-area").classList.add("hidden");
   $("screen-results").innerHTML = "";
   $("screen-fuzzy").innerHTML = "";
   $("progress-log").innerHTML = "";
   $("progress-bar").style.width = "0%";
-  $("progress-status").textContent = "Starting…";
+  setStatus("Starting…");
   $("progress-panel").classList.remove("hidden");
   $("progress-panel").querySelector(".dot").style.animationPlayState = "running";
 
+  ABORT = new AbortController();
   try {
-    const resp = await fetch("/api/analyze", { method: "POST", body: fd });
+    const resp = await fetch("/api/analyze", { method: "POST", body: fd, signal: ABORT.signal });
     if (!resp.ok) {
       // Early validation error — a normal JSON error, not a stream.
       const body = await resp.json().catch(() => ({}));
@@ -294,12 +345,17 @@ async function runAnalysis() {
     }
     await consumeStream(resp.body);
   } catch (err) {
-    // "Failed to fetch" and friends surface here.
-    showError((err && err.message) ? err.message : "The connection was lost. Please try again.");
-    $("progress-status").textContent = "Stopped.";
+    if (err && err.name === "AbortError") {
+      setStatus("Stopped.");
+      logLine("Analysis stopped by user.");
+    } else {
+      // "Failed to fetch" and friends surface here.
+      showError((err && err.message) ? err.message : "The connection was lost. Please try again.");
+      setStatus("Stopped.");
+    }
   } finally {
-    $("run").disabled = false;
-    $("progress-panel").querySelector(".dot").style.animationPlayState = "paused";
+    ABORT = null;
+    endRunUI();
   }
 }
 
@@ -331,10 +387,18 @@ function logLine(msg, tick) {
 
 function handleEvent(ev) {
   switch (ev.type) {
-    case "heartbeat": return;
+    case "ready": return;         // buffering-flush primer; ignore
+    case "heartbeat": return;     // legacy; ignore
+    case "tick": {                // liveness during the long extraction call
+      if (!FINALIZED && STATUS_BASE) {
+        $("progress-status").textContent = `${STATUS_BASE}  (${ev.elapsed}s)`;
+      }
+      return;
+    }
     case "progress": {
-      $("progress-status").textContent = ev.message || ev.stage;
-      if (ev.stage === "extract_done") { logLine(ev.message, true); $("progress-bar").style.width = "8%"; }
+      setStatus(ev.message || ev.stage);
+      if (ev.stage === "extract") { $("progress-bar").style.width = "4%"; logLine(ev.message); }
+      else if (ev.stage === "extract_done") { logLine(ev.message, true); $("progress-bar").style.width = "8%"; }
       else if (ev.stage === "verify") $("progress-bar").style.width = (8 + 72 * (ev.done / ev.total)).toFixed(0) + "%";
       else if (ev.stage === "misquote") { logLine(ev.message); $("progress-bar").style.width = "84%"; }
       else logLine(ev.message);

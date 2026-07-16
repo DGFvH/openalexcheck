@@ -90,15 +90,29 @@
       <p><span class="field-label">Detail description</span> — this is the instruction EduGenAI's assistant follows. Paste it verbatim:</p>
       <div class="codewrap"><pre id="c-detail">Use this extension to fact-check the reference list of an uploaded paper.
 
-Workflow:
-1. Read the document and extract every entry in the reference list. For each, pull out: title, the full list of author names, year, DOI (only if printed), journal/venue, volume, issue, and page range. Also find the sentence(s) in the body where that source is cited, with one sentence of context on each side.
-2. Call the "verify_references" function with all references at once.
-3. For every reference the function returns:
-   - If status is "not_found", flag it as a POTENTIAL HALLUCINATION.
-   - If status is "fuzzy", tell the user the closest candidate(s) it returned.
-   - If "field_check" contains any field with status "mismatch", report exactly which printed details are wrong (especially authors and year), showing the reference value vs the OpenAlex value.
-   - Using the returned "abstract", judge whether the student's citing sentence matches what the paper is actually about. If the paper is on a different topic than the student implies, flag it as a MISQUOTE and explain the mismatch in one sentence.
-4. Present the results as a table sorted worst-first: hallucinations, then wrong authors/DOI/title, then misquotes, then wrong year, then minor field mismatches, then clean references. Never invent a DOI, author, or verdict that the function did not return.</pre><button class="copy" data-for="c-detail">Copy</button></div>
+STEP 1 - EXTRACT. Read the document. For every entry in the reference list, pull out: title, the full list of author names in order, whether it ends in "et al.", year, DOI (only if printed), journal/venue, volume, issue, and page range. Also find the sentence(s) in the body where each source is cited, with one sentence of context on each side. Keep those citation sentences in your own working notes for Step 3 - do NOT send them to the function.
+
+STEP 2 - VERIFY. Call the "verify_references" function once, passing every reference. For each one it returns: "badge" and "severity" (0-100), "status" (found / fuzzy / not_found / lookup_failed), "mismatched_fields", a "field_check" comparing each printed detail to OpenAlex (with reference_value vs openalex_value), the matched "work" (authors, year, venue, doi, url) and its "abstract", and - for FUZZY matches only, where "work" is null and "field_check" is empty - a "candidates" array of the closest works (each with title, authors, year, venue, doi, url).
+
+STEP 3 - JUDGE MISQUOTES. For each reference whose status is "found", compare the citation sentence(s) you kept in Step 1 with the returned "abstract". If the student uses the source as though it were about a different topic than the abstract shows (e.g. the abstract is about macroeconomic productivity but the student cites it for labour productivity specifically), that is a MISQUOTE. Otherwise it is consistent. If there is no abstract, or the reference is never cited in the body, the misquote check is "unclear". Never invent a verdict.
+
+STEP 4 - PRESENT (follow this format exactly). The user must NEVER see the raw JSON from the function - it is a machine interface. Convert it into ONE readable Markdown table, one row per reference, sorted by DESCENDING severity. Use the function's "severity" value; if you judge a reference to be a misquote MISMATCH, raise its severity to AT LEAST 80 (keep the function's number if it is already higher). Columns:
+
+| # | Flag | Reference (as printed) | Status | Metadata issues | Misquote | What the paper is about |
+
+- Flag: 🔵 if status is lookup_failed (it could not be checked); otherwise 🔴 if severity >= 70, 🟠 if 45-69, 🟢 otherwise.
+- Status: the "badge" value with an emoji - 🔴 Potential hallucination (not_found), 🟠 Fuzzy match (fuzzy), 🔵 Lookup failed (found no result to compare), 🟢 Verified (found).
+- Metadata issues: if "mismatched_fields" is empty, write "-". Otherwise, for each mismatched field take its reference_value and openalex_value from "field_check" and write:  field: "printed" -> "OpenAlex".  Put **authors** in bold when authors is one of them. (For a fuzzy row there is no field_check yet - write "-".)
+- Misquote: 🔴 Mismatch / 🟠 Likely mismatch / 🟢 Consistent / ➖ Unclear, plus a 6-10 word reason. (Only "found" rows have a misquote; for others write "-".)
+- What the paper is about: one short clause summarising the "work" abstract, or "-" if none.
+
+After the table, add a "Details" section covering only the 🔴 and 🟠 rows:
+- For a FOUND row: the matched title as a link to its "work.url", the field-by-field comparison, and one sentence on the misquote if any.
+- For a FUZZY row: "work" is null - instead list the entries in "candidates" (title as a link to each "url", with authors and year) and ask the user to confirm which, if any, is the intended source. Do NOT present a fuzzy row as verified.
+
+End with one summary line: "N references - X verified, Y fuzzy, Z potential hallucinations, plus any metadata/misquote flags."
+
+Never invent a DOI, author, year, or verdict the function did not return. If "status" is "lookup_failed", say the reference could not be checked - do NOT call it a hallucination.</pre><button class="copy" data-for="c-detail">Copy</button></div>
     </li>
     <li>
       <h3>Add the Header</h3>
@@ -172,6 +186,10 @@ Workflow:
     {
       "index": 1,
       "status": "found",
+      "badge": "Verified",
+      "severity": 85,
+      "priority": "Review",
+      "mismatched_fields": ["authors", "year", "journal"],
       "work": {
         "title": "Highly accurate protein structure prediction with AlphaFold",
         "authors": ["John Jumper", "Richard Evans", "..."],
@@ -195,6 +213,32 @@ Workflow:
 
   <div class="note"><strong>A single-reference endpoint</strong> is also available at <code class="inline">POST /api/verify</code> — same fields, but without the outer <code class="inline">references</code> array — if you prefer one call per reference. The batch endpoint is recommended for a whole bibliography (one round trip, kinder to OpenAlex's rate limits).</div>
 
+  <h2>From JSON to a readable table — what you'll see in chat</h2>
+  <p><strong>You never look at that JSON.</strong> It is the machine interface between EduGenAI and the endpoint. The <em>Detail description</em> you pasted in Step 2 tells EduGenAI's assistant to convert it (STEP 4) into a severity-sorted table with flags, scores, and the mismatches spelled out — mirroring how this site presents results. A typical chat answer looks like:</p>
+  <div class="card flow">
+    <table>
+      <tr><th>#</th><th>Flag</th><th>Reference (as printed)</th><th>Status</th><th>Metadata issues</th><th>Misquote</th><th>What the paper is about</th></tr>
+      <tr><td>3</td><td>🔴</td><td>Zorblatt, Q. (2021). Quantum blockchain effects on medieval cheese trading…</td><td>🔴 Potential hallucination</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td>2</td><td>🔴</td><td>Smith, J. &amp; Jones, B. (2019). Highly accurate protein structure prediction… Science, 100-110.</td><td>🟢 Verified</td><td><strong>authors:</strong> "Smith, Jones" → "Jumper, Evans…" · year: 2019 → 2021 · journal: Science → Nature</td><td>🔴 Mismatch — cited for labour productivity; paper is protein-structure AI</td><td>Deep-learning protein structure prediction</td></tr>
+      <tr><td>1</td><td>🟢</td><td>Vaswani, A. et al. (2017). Attention is all you need. NeurIPS.</td><td>🟢 Verified</td><td>—</td><td>🟢 Consistent</td><td>Attention-only sequence model (Transformer)</td></tr>
+    </table>
+  </div>
+  <p>…followed by a <em>Details</em> section for the flagged rows and a one-line summary count. The assistant does this conversion because the Detail description explicitly says the user must never see the raw JSON.</p>
+  <div class="note"><strong>If you still see raw JSON in the chat:</strong> the Detail description probably wasn't saved with the extension (re-check Step 2), or the platform truncated it. Two fixes: (1) re-paste the full Detail description; (2) as a per-chat override, end your request with — <em>“Present the results as a severity-sorted table with flags and the metadata mismatches spelled out; do not show raw JSON.”</em> The endpoint's JSON also ships ready-made display fields (<code class="inline">badge</code>, <code class="inline">severity</code>, <code class="inline">priority</code>, <code class="inline">mismatched_fields</code>) precisely so the assistant only has to lay them out, not compute them.</div>
+
+  <h2>What data passes through your server?</h2>
+  <p>Because the extension calls <em>your</em> deployment, it helps to be precise about what actually travels there — and what does not.</p>
+  <div class="card flow">
+    <table>
+      <tr><th>Data</th><th>Where it goes</th></tr>
+      <tr><td>The paper's full text, the student's name, and the citing sentences</td><td><strong>Stay inside EduGenAI.</strong> The assistant keeps the citing sentences for its own misquote reasoning; they are never sent to your endpoint.</td></tr>
+      <tr><td>Reference <strong>metadata</strong> only — title, authors, year, DOI, journal, volume, issue, pages</td><td>Sent to your <code class="inline">/api/verify_batch</code> endpoint, and (titles/DOIs) on to OpenAlex for the lookup.</td></tr>
+      <tr><td>Any LLM key</td><td><strong>Not involved server-side at all</strong> — the reasoning runs on EduGenAI's model.</td></tr>
+    </table>
+  </div>
+  <div class="note"><strong>So, does “all data go through me”?</strong> No — only the bibliographic metadata of the references, and only in transit. The endpoint reads just those fields; the citing sentences aren't part of what the extension sends, and anything else that were included would be discarded unread (never logged or stored). <strong>Just the function call?</strong> Yes; that is the only thing that reaches your server. <strong>Is it logged?</strong> Not by this app — it is stateless (no database, no file writes) and never logs request bodies or keys. Whatever hosting stack or reverse proxy you deploy behind may keep its own access log (request line: method + path + status, not bodies) — that part is under your control, and you can turn it down.
+  <br><br><strong>One caveat about the OpenAlex Premium key:</strong> it is used per-request, never stored, and scrubbed from any error message this app returns. But when your endpoint calls OpenAlex, the key travels as a query parameter on the outbound URL — so if you run behind an <em>egress</em> proxy that logs full outbound URLs, it could appear there. If that matters, don't set a Premium key (the tool works fine without one) or use a proxy that redacts query strings.</div>
+
   <h2>Notes &amp; limits</h2>
   <ul>
     <li>No LLM key is stored or used by the extension; OpenAlex is free and needs no key.</li>
@@ -205,7 +249,13 @@ Workflow:
 
 </main>
 <footer>
-  This page is served by the Citation Checker itself, at <code>/edugenai</code>. The PDF version contains the same instructions.
+  <p>This page is served by the Citation Checker itself, at <code>/edugenai</code>. The PDF version contains the same instructions.</p>
+  <p style="margin-top:.6rem">© Daniël van Hemert ·
+    <a href="https://danielvanhemert.com" target="_blank" rel="noopener">danielvanhemert.com</a> ·
+    <a href="https://www.linkedin.com/in/dani%C3%ABl-van-hemert-72560a12b/" target="_blank" rel="noopener">LinkedIn</a> ·
+    <a href="https://scholar.google.com/citations?user=JcqW6DD9dlEC&hl=nl" target="_blank" rel="noopener">Google Scholar</a> ·
+    <a href="https://orcid.org/0000-0002-1391-1714" target="_blank" rel="noopener">ORCID</a>
+  </p>
 </footer>
 <script>
   // Show the real deployment host in the copyable snippets when served live.

@@ -243,3 +243,23 @@ def test_complete_json_generic_error_when_not_truncated(monkeypatch):
         assert False, "should raise"
     except LLMError as e:
         assert "did not return valid JSON" in str(e)
+
+
+def test_display_matches_site_severity():
+    from app.main import _display
+    # hallucination
+    assert _display({"status": "not_found"})["severity"] == 100
+    # found + author mismatch (weight 9) -> 85 / Review
+    d = _display({"status": "found", "field_check": [
+        {"field": "authors", "status": "mismatch"}, {"field": "year", "status": "mismatch"}]})
+    assert d["severity"] == 85 and d["priority"] == "Review"
+    assert set(d["mismatched_fields"]) == {"authors", "year"}
+    assert d["badge"] == "Verified"
+    # found + only a minor field (volume, weight 3) -> 50 / Check
+    d2 = _display({"status": "found", "field_check": [{"field": "volume", "status": "mismatch"}]})
+    assert d2["severity"] == 50 and d2["priority"] == "Check"
+    # found clean -> 8 / no priority
+    d3 = _display({"status": "found", "field_check": []})
+    assert d3["severity"] == 8 and d3["priority"] == ""
+    # lookup_failed -> 35, never treated as hallucination
+    assert _display({"status": "lookup_failed"})["severity"] == 35
