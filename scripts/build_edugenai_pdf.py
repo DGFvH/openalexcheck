@@ -109,7 +109,9 @@ citation as missing its reference.
 STEP 2 - VERIFY. Call the "verify_references" function once, passing every
 reference that has at least a title or a DOI (an entry with neither cannot be
 identified and comes back as lookup_failed - report it as unverifiable, never as
-a hallucination). For each it returns: "badge" and "severity" (0-100), "status" (found /
+a hallucination). If the function's only parameter is "references_json" (a
+string), serialize the reference array to a JSON string and pass it as that
+parameter. For each it returns: "badge" and "severity" (0-100), "status" (found /
 fuzzy / not_found / lookup_failed), "mismatched_fields" and "minor_fields", a
 "field_check" comparing each printed detail to OpenAlex (reference_value vs
 openalex_value; each field's status is "match", "close" = a minor naming
@@ -330,6 +332,16 @@ def build():
                            "endpoint accepts the arguments in the query string too.", BODY))
     story.append(Paragraph("Function definition", LABEL))
     story.append(code(SCHEMA))
+    story.append(Paragraph("Plan B — if the arguments never arrive (the Troubleshooting hint "
+                           "shows an empty body AND an empty query string on both POST and "
+                           "GET): the platform's gateway cannot serialize the nested "
+                           "'references' array. Replace the function definition with a flat "
+                           "single-string version — one required string parameter named "
+                           "references_json, described as \"The paper's references as a JSON "
+                           "string: [{\\\"title\\\":...,\\\"authors\\\":[...],...}]\". The "
+                           "assistant then passes the same array serialized as a JSON string, "
+                           "which any gateway can transmit and the endpoint accepts natively. "
+                           "The exact copy-paste block is on the /edugenai page.", BODY))
 
     story.append(Paragraph("Step 5 — Submit and test", H2))
     story.append(Paragraph("Click Submit. In a chat, upload a paper and type “start” (or "
@@ -355,7 +367,10 @@ def build():
                            "arguments into the POST body — change the function's Method from "
                            "POST to GET (arguments then travel in the query string, which the "
                            "endpoint accepts), or fill in the builder's request-body/template "
-                           "field if it has one. Any other hint describes the shape that "
+                           "field if it has one. Empty on BOTH POST and GET (body empty and no "
+                           "query keys): the gateway cannot serialize the nested references "
+                           "array — switch to the Plan B single-string function definition "
+                           "(references_json). Any other hint describes the shape that "
                            "arrived — send it to the maintainer. You can test the endpoint from "
                            "a terminal: curl -s -X POST <host>/api/verify_batch -H "
                            "\"Content-Type: application/json\" -d '{\"references\":[{\"title\":"

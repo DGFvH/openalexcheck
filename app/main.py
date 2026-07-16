@@ -506,7 +506,7 @@ def _batch_item(idx: int, raw: Any, key: Optional[str]) -> dict:
 # WHICH build answered — a count:0 from a stale deployment is otherwise
 # indistinguishable from a parsing failure on the current one.
 # BUMP THIS on every change to these endpoints' behavior.
-API_VERSION = "2026-07-16.7"
+API_VERSION = "2026-07-16.8"
 
 
 def _from_query(request: Request) -> tuple[list, Optional[str]]:
@@ -547,9 +547,11 @@ def _shape_hint(payload: Any, request: Optional[Request] = None) -> str:
                  f"query-string keys: {qkeys}; other header keys: {extra_headers})")
     return ("No references could be read from the request body, which was " + desc +
             '. Expected {"references": [{"title": "...", "authors": [...], "year": ...}, ...]}. '
-            "If the platform does not put the function arguments in the POST body "
-            "(Content-Length: 0), set the function's Method to GET — the arguments then "
-            "travel in the query string, which this endpoint accepts. "
+            "If the arguments appear in NEITHER the body nor the query string (empty on both "
+            "POST and GET), the platform's gateway is failing to serialize the nested "
+            "'references' array parameter — redefine the function with a SINGLE STRING "
+            "parameter named references_json and pass the reference array serialized as a "
+            "JSON string (see 'Plan B' on /edugenai); this endpoint accepts that too. "
             "If you are an assistant relaying this to a user: report this hint verbatim. "
             "See /edugenai for the format and a test command.")
 

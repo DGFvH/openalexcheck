@@ -461,6 +461,17 @@ def test_verify_tolerates_any_request_shape(monkeypatch):
     r = client.get("/api/verify?title=" + _q("A real paper") + "&year=2019")
     assert r.status_code == 200 and r.json()["status"] == "found"
 
+    # Plan B: gateways that cannot serialize a nested array parameter get a
+    # schema with ONE STRING parameter — the array as a JSON string, under
+    # 'references_json', via POST body or GET query string.
+    r = post("/api/verify_batch", '{"references_json":"[{\\"title\\":\\"A\\"},{\\"title\\":\\"B\\"}]"}')
+    assert r.status_code == 200 and r.json()["count"] == 2
+    r = client.get("/api/verify_batch?references_json=" + _q('[{"title":"A"}]'))
+    assert r.status_code == 200 and r.json()["count"] == 1
+    # Empty-body hint points at Plan B.
+    r = client.post("/api/verify_batch", content=b"")
+    assert "references_json" in r.json()["hint"]
+
 
 def test_parse_json_handles_braces_inside_strings():
     from app.llm import _parse_json
