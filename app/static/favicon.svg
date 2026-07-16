@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <style>
+    .ln   { fill: none; stroke: #1a1a1a; stroke-width: 5; stroke-linejoin: round; stroke-linecap: round; }
+    .body { fill: #ffffff; stroke: #1a1a1a; stroke-width: 5; stroke-linejoin: round; }
+    .ink  { fill: #1a1a1a; }
+    @media (prefers-color-scheme: dark) {
+      .ln   { stroke: #f2f2f2; }
+      .body { fill: #1a1a1a; stroke: #f2f2f2; }
+      .ink  { fill: #f2f2f2; }
+    }
+  </style>
+
+  <!-- ghost body -->
+  <path class="body" d="M22,74 L22,54 C22,37 34,27 50,27 C66,27 78,37 78,54 L78,74
+    Q70,86 62,74 Q54,86 46,74 Q38,86 30,74 Q26,80 22,74 Z"/>
+
+  <!-- face -->
+  <ellipse class="ink" cx="42" cy="50" rx="4" ry="6"/>
+  <ellipse class="ink" cx="58" cy="50" rx="4" ry="6"/>
+  <ellipse class="ink" cx="50" cy="63" rx="3.5" ry="5"/>
+
+  <!-- book, held lower-left -->
+  <path class="body" d="M16,60 L34,54 L38,70 L20,76 Z"/>
+  <path class="ln" d="M25,57 L29,71"/>
+
+  <!-- graduation cap: band, mortarboard, tassel -->
+  <path class="body" d="M37,25 L63,25 L64,32 Q50,37 36,32 Z"/>
+  <path class="body" d="M50,8 L77,19 L50,30 L23,19 Z"/>
+  <path class="ln" d="M77,19 C82,25 81,31 79,36"/>
+  <rect class="ink" x="75.5" y="35" width="7" height="10" rx="2.5"/>
+</svg>
