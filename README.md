@@ -33,9 +33,20 @@ upload ──▶ text extraction (pypdf / python-docx)
        ──▶ UI: results screen + fuzzy-matches screen
 ```
 
+The analysis endpoint **streams progress and results** as newline-delimited
+JSON. The browser shows a live progress bar and log, and reference cards
+appear one-by-one as each is resolved (misquote verdicts fill in afterwards).
+Besides the nicer UX, streaming keeps the connection alive with periodic
+heartbeats, so a long analysis can't be dropped by an idle-connection timeout
+(the usual cause of a browser "Failed to fetch").
+
 OpenAlex needs no API key by default; an optional field accepts an
 [OpenAlex Premium](https://openalex.org/pricing) API key for higher rate
 limits. The LLM runs on the key you paste in the form.
+
+**Max output tokens** per LLM call is customizable in the form (default
+16000, range 1000–64000). Raise it for very long bibliographies; lower it to
+cap cost.
 
 ## Run it
 

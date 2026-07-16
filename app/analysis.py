@@ -89,8 +89,8 @@ ITEMS:
 {ITEMS}"""
 
 
-def extract_references(llm: LLMClient, text: str) -> list[dict]:
-    data = llm.complete_json(EXTRACT_SYSTEM, EXTRACT_PROMPT.replace("{TEXT}", text), max_tokens=16000)
+def extract_references(llm: LLMClient, text: str, max_tokens: int = 16000) -> list[dict]:
+    data = llm.complete_json(EXTRACT_SYSTEM, EXTRACT_PROMPT.replace("{TEXT}", text), max_tokens=max_tokens)
     refs = data.get("references")
     if not isinstance(refs, list):
         raise LLMError("The model did not return a 'references' list.")
@@ -122,7 +122,7 @@ def verify_references(refs: list[dict], openalex_key: Optional[str] = None) -> l
     return results
 
 
-def compare_contexts(llm: LLMClient, items: list[dict]) -> list[dict]:
+def compare_contexts(llm: LLMClient, items: list[dict], max_tokens: int = 8000) -> list[dict]:
     """Misquote check. Each item: {id, title, abstract, contexts}.
 
     Returns [{id, verdict, explanation, paper_topic, student_usage}].
@@ -151,7 +151,7 @@ def compare_contexts(llm: LLMClient, items: list[dict]) -> list[dict]:
     for start in range(0, len(payload_items), COMPARE_BATCH_SIZE):
         batch = payload_items[start:start + COMPARE_BATCH_SIZE]
         prompt = COMPARE_PROMPT.replace("{ITEMS}", _json.dumps(batch, ensure_ascii=False, indent=1))
-        data = llm.complete_json(COMPARE_SYSTEM, prompt, max_tokens=8000)
+        data = llm.complete_json(COMPARE_SYSTEM, prompt, max_tokens=max_tokens)
         results = data.get("results") or []
         got = {r.get("id"): r for r in results if isinstance(r, dict)}
         for item in batch:

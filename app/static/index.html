@@ -66,6 +66,15 @@
   .summary { font-family: system-ui, sans-serif; font-size: .9rem; margin-top: 1rem; display: flex; gap: 1.4rem; flex-wrap: wrap; }
   .error { color: var(--bad); font-family: system-ui, sans-serif; font-size: .9rem; margin-top: 1rem; white-space: pre-wrap; }
   .spinner { font-family: system-ui, sans-serif; color: var(--muted); margin-top: 1rem; }
+  .progress-panel { margin-top: 1.3rem; font-family: system-ui, sans-serif; }
+  .progress-head { display: flex; align-items: center; gap: .5rem; font-size: .92rem; color: var(--ink); }
+  .progress-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+  .progress-bar-track { height: 5px; background: var(--border); border-radius: 3px; margin: .6rem 0; overflow: hidden; }
+  .progress-bar-fill { height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
+  .progress-log { font-size: .78rem; color: var(--muted); max-height: 8.5rem; overflow-y: auto; }
+  .progress-log div { padding: .1rem 0; }
+  .progress-log div.tick::before { content: "✓ "; color: var(--ok); }
   .hidden { display: none; }
   a { color: var(--accent); }
 </style>
@@ -106,6 +115,11 @@
         <input type="password" id="openalex_key" autocomplete="new-password" spellcheck="false" placeholder="only needed for OpenAlex Premium">
         <div class="keynote">OpenAlex works without a key. If you have a Premium key, it is likewise one-time use and never stored.</div>
       </div>
+      <div>
+        <label>Max output tokens per LLM call</label>
+        <input type="number" id="max_tokens" value="16000" min="1000" max="64000" step="1000">
+        <div class="keynote">Caps each model call. Raise it for very long bibliographies; lower it to control cost. 1000–64000.</div>
+      </div>
     </div>
     <div class="checks">
       <label><input type="checkbox" id="check_hallucination" checked>
@@ -123,7 +137,14 @@
       </ul>
     </details>
     <button class="primary" id="run">Run checks</button>
-    <div class="spinner hidden" id="spinner">Analysing… extracting references, querying OpenAlex, comparing contexts. This can take a minute or two.</div>
+    <div class="progress-panel hidden" id="progress-panel">
+      <div class="progress-head">
+        <span class="dot"></span>
+        <span id="progress-status">Starting…</span>
+      </div>
+      <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar"></div></div>
+      <div class="progress-log" id="progress-log"></div>
+    </div>
     <div class="error hidden" id="error"></div>
   </div>
 
@@ -199,14 +220,17 @@ function switchTab(name) {
   $("screen-fuzzy").classList.toggle("hidden", name !== "fuzzy");
 }
 
+let FINALIZED = false;
+const CARDS = {}; // reference id -> card element, for live patching
+
 async function runAnalysis() {
   const file = $("file").files[0];
   const key = $("api_key").value.trim();
   $("error").classList.add("hidden");
   if (!file) return showError("Please choose a PDF or DOCX file.");
   if (!key) return showError("Please paste your API key (it is used once and not stored).");
-  if (!$("check_hallucination").checked && !$("check_misquote").checked)
-    return showError("Tick at least one of the two checks.");
+  const wantHall = $("check_hallucination").checked, wantMis = $("check_misquote").checked;
+  if (!wantHall && !wantMis) return showError("Tick at least one of the two checks.");
 
   const fd = new FormData();
   fd.append("file", file);
@@ -214,37 +238,126 @@ async function runAnalysis() {
   fd.append("api_key", key);
   fd.append("model", selectedModel());
   fd.append("openalex_key", $("openalex_key").value.trim());
-  fd.append("check_hallucination", $("check_hallucination").checked);
-  fd.append("check_misquote", $("check_misquote").checked);
+  fd.append("max_tokens", $("max_tokens").value || "16000");
+  fd.append("check_hallucination", wantHall);
+  fd.append("check_misquote", wantMis);
 
+  // Reset state
+  DATA = { checks: { hallucination: wantHall, misquote: wantMis }, results: [] };
+  FINALIZED = false;
+  for (const k in CARDS) delete CARDS[k];
   $("run").disabled = true;
-  $("spinner").classList.remove("hidden");
   $("results-area").classList.add("hidden");
+  $("screen-results").innerHTML = "";
+  $("screen-fuzzy").innerHTML = "";
+  $("progress-log").innerHTML = "";
+  $("progress-bar").style.width = "0%";
+  $("progress-status").textContent = "Starting…";
+  $("progress-panel").classList.remove("hidden");
+  $("progress-panel").querySelector(".dot").style.animationPlayState = "running";
+
   try {
     const resp = await fetch("/api/analyze", { method: "POST", body: fd });
-    const body = await resp.json().catch(() => ({}));
-    if (!resp.ok) throw new Error(body.detail || `Request failed (${resp.status})`);
-    DATA = body;
-    render();
+    if (!resp.ok) {
+      // Early validation error — a normal JSON error, not a stream.
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(typeof body.detail === "string" ? body.detail : `Request failed (${resp.status})`);
+    }
+    await consumeStream(resp.body);
   } catch (err) {
-    showError(err.message);
+    // "Failed to fetch" and friends surface here.
+    showError((err && err.message) ? err.message : "The connection was lost. Please try again.");
+    $("progress-status").textContent = "Stopped.";
   } finally {
     $("run").disabled = false;
-    $("spinner").classList.add("hidden");
+    $("progress-panel").querySelector(".dot").style.animationPlayState = "paused";
   }
 }
 
-function showError(msg) {
-  $("error").textContent = msg;
-  $("error").classList.remove("hidden");
+async function consumeStream(body) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf("\n")) !== -1) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (line) handleEvent(JSON.parse(line));
+    }
+  }
+  if (buf.trim()) handleEvent(JSON.parse(buf.trim()));
 }
 
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"']/g, c =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+function logLine(msg, tick) {
+  const el = document.createElement("div");
+  if (tick) el.className = "tick";
+  el.textContent = msg;
+  $("progress-log").appendChild(el);
+  $("progress-log").scrollTop = $("progress-log").scrollHeight;
 }
 
-function render() {
+function handleEvent(ev) {
+  switch (ev.type) {
+    case "heartbeat": return;
+    case "progress": {
+      $("progress-status").textContent = ev.message || ev.stage;
+      if (ev.stage === "extract_done") { logLine(ev.message, true); $("progress-bar").style.width = "8%"; }
+      else if (ev.stage === "verify") $("progress-bar").style.width = (8 + 72 * (ev.done / ev.total)).toFixed(0) + "%";
+      else if (ev.stage === "misquote") { logLine(ev.message); $("progress-bar").style.width = "84%"; }
+      else logLine(ev.message);
+      break;
+    }
+    case "result": {
+      DATA.results.push(ev.result);
+      ensureResultsVisible();
+      appendResultCard(ev.result);
+      updateSummary();
+      break;
+    }
+    case "misquote": {
+      const r = DATA.results.find(x => x.reference.id === ev.id);
+      if (r) { r.misquote = ev.misquote; patchMisquote(r); }
+      break;
+    }
+    case "done": {
+      DATA.checks = ev.checks;
+      finalize();
+      break;
+    }
+    case "error": {
+      showError(ev.detail || "Analysis failed.");
+      $("progress-status").textContent = "Failed.";
+      break;
+    }
+  }
+}
+
+function ensureResultsVisible() {
+  if (!$("results-area").classList.contains("hidden")) return;
+  $("results-area").classList.remove("hidden");
+  switchTab("results");
+}
+
+function appendResultCard(r) {
+  const div = document.createElement("div");
+  div.innerHTML = renderResult(r);
+  const card = div.firstElementChild;
+  CARDS[r.reference.id] = card;
+  $("screen-results").appendChild(card);
+}
+
+function patchMisquote(r) {
+  const card = CARDS[r.reference.id];
+  if (!card) return;
+  const slot = card.querySelector(".misquote");
+  if (slot) slot.outerHTML = renderMisquote(r);
+}
+
+function updateSummary() {
   const results = DATA.results;
   const counts = { found: 0, fuzzy: 0, not_found: 0, lookup_failed: 0 };
   results.forEach(r => counts[r.status]++);
@@ -255,14 +368,30 @@ function render() {
     `<span style="color:var(--bad)">● ${counts.not_found} potential hallucinations</span>` +
     (counts.lookup_failed ? `<span style="color:var(--info)">● ${counts.lookup_failed} lookup failed</span>` : "");
   $("fuzzy-count").textContent = counts.fuzzy ? `(${counts.fuzzy})` : "";
+}
 
-  $("screen-results").innerHTML = results.map(renderResult).join("") ||
-    "<p class='meta'>No references found.</p>";
-  $("screen-fuzzy").innerHTML = results.filter(r => r.status === "fuzzy").map(renderFuzzy).join("") ||
+function finalize() {
+  FINALIZED = true;
+  $("progress-status").textContent = "Done.";
+  $("progress-bar").style.width = "100%";
+  // Any still-pending misquote slots (found refs with no verdict) get their
+  // final rendering, and the fuzzy screen is built now that all refs are in.
+  DATA.results.forEach(patchMisquote);
+  const fuzzies = DATA.results.filter(r => r.status === "fuzzy");
+  $("screen-fuzzy").innerHTML = fuzzies.map(renderFuzzy).join("") ||
     "<p class='meta' style='margin-top:1rem'>No fuzzy matches — every reference either resolved cleanly or was not found at all.</p>";
-  $("results-area").classList.remove("hidden");
-  switchTab("results");
   attachFuzzyHandlers();
+  updateSummary();
+}
+
+function showError(msg) {
+  $("error").textContent = msg;
+  $("error").classList.remove("hidden");
+}
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, c =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
 function refHeader(r) {
@@ -285,11 +414,13 @@ function renderResult(r) {
 }
 
 function renderMisquote(r) {
-  if (!DATA.checks.misquote) return "";
+  if (!DATA.checks.misquote) return `<div class="misquote"></div>`;
   const m = r.misquote;
   const contexts = r.reference.contexts || [];
   const target = `<div class="misquote" id="mq-${r.reference.id}">`;
   if (!m) {
+    if (r.status === "found" && !FINALIZED)
+      return target + `<div class="meta">⏳ Comparing citation context against the abstract…</div></div>`;
     if (r.status === "found")
       return target + `<div class="meta">Misquote check unavailable for this reference.</div></div>`;
     return target + `</div>`;
@@ -341,6 +472,7 @@ function attachFuzzyHandlers() {
             provider: $("provider").value,
             api_key: $("api_key").value.trim(),
             model: selectedModel(),
+            max_tokens: Number($("max_tokens").value) || 16000,
             items: [{ id: refId, title: cand.title, abstract: cand.abstract, contexts: r.reference.contexts }],
           }),
         });
