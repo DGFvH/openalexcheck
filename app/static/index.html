@@ -592,17 +592,44 @@ function patchMisquote(r) {
   if (slot) slot.outerHTML = renderMisquote(r);
 }
 
+// A found reference is "flagged" when it exists but something needs a human
+// look — a metadata mismatch OR a misquote (the usage/abstract check). This is
+// the same threshold as the per-card Review/Check chip, so counts and cards
+// agree, and abstract mismatches can't hide inside a "verified" tally.
+function metaMismatch(r) {
+  return (r.field_check || []).some(f => f.status === "mismatch");
+}
+function misquoteFlagged(r) {
+  const v = r.misquote && r.misquote.verdict;
+  return v === "mismatch" || v === "likely_mismatch";
+}
+
 function updateSummary() {
   const results = DATA.results;
-  const counts = { found: 0, fuzzy: 0, not_found: 0, lookup_failed: 0 };
-  results.forEach(r => counts[r.status]++);
+  let clean = 0, flagged = 0, meta = 0, misq = 0, fuzzy = 0, notFound = 0, lookupFail = 0;
+  results.forEach(r => {
+    if (r.status === "fuzzy") fuzzy++;
+    else if (r.status === "not_found") notFound++;
+    else if (r.status === "lookup_failed") lookupFail++;
+    else if (r.status === "found") {
+      const m = metaMismatch(r), q = misquoteFlagged(r);
+      if (m) meta++;
+      if (q) misq++;
+      if (m || q) flagged++; else clean++;
+    }
+  });
+  const reviewBits = [];
+  if (meta) reviewBits.push(`${meta} with wrong details`);
+  if (misq) reviewBits.push(`${misq} cited out of context`);
+  const reviewTip = reviewBits.length ? ` (${reviewBits.join(", ")})` : "";
   $("summary").innerHTML =
     `<span>${results.length} references</span>` +
-    `<span style="color:var(--ok)">● ${counts.found} verified</span>` +
-    `<span style="color:var(--warn)">● ${counts.fuzzy} fuzzy</span>` +
-    `<span style="color:var(--bad)">● ${counts.not_found} potential hallucinations</span>` +
-    (counts.lookup_failed ? `<span style="color:var(--info)">● ${counts.lookup_failed} lookup failed</span>` : "");
-  $("fuzzy-count").textContent = counts.fuzzy ? `(${counts.fuzzy})` : "";
+    `<span style="color:var(--ok)">● ${clean} verified &amp; consistent</span>` +
+    `<span style="color:var(--warn)" title="Exist in OpenAlex but need a human look${esc(reviewTip)}">● ${flagged} need review${reviewTip}</span>` +
+    (fuzzy ? `<span style="color:var(--warn)">● ${fuzzy} fuzzy</span>` : "") +
+    `<span style="color:var(--bad)">● ${notFound} potential hallucinations</span>` +
+    (lookupFail ? `<span style="color:var(--info)">● ${lookupFail} lookup failed</span>` : "");
+  $("fuzzy-count").textContent = fuzzy ? `(${fuzzy})` : "";
 }
 
 function finalize() {

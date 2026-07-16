@@ -109,8 +109,11 @@ After the table, add a "Details" section for the red and amber rows only.
   its "url", with authors and year) and ask the user to confirm which, if any, is
   the intended source. Do NOT present a fuzzy row as verified.
 
-End with one summary line:
-"N references - X verified, Y fuzzy, Z potential hallucinations, plus flags."
+End with one summary line that does NOT hide problems inside "verified":
+"N references - X verified & consistent, Y need review, Z fuzzy, W potential
+hallucinations." A reference that EXISTS but has a metadata mismatch or a
+misquote counts under "need review", never under "verified" (optionally break
+Y down, e.g. "2 with wrong details, 1 cited out of context").
 
 Never invent a DOI, author, year, or verdict the function did not return. If
 "status" is "lookup_failed", say the reference could not be checked - do NOT call
