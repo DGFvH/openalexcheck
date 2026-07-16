@@ -54,6 +54,12 @@ DETAIL = """Use this extension to fact-check the reference list of an uploaded p
 (Emoji are written as words below; copy the exact version with emoji from the
 /edugenai page.)
 
+TRIGGER. Treat any short go-ahead from the user - "start", "go", "run", "check",
+"verify", "check my citations", or a paper uploaded with no other instruction -
+as the signal to run all four steps below, end to end, on the paper already in
+the conversation. Do not ask clarifying questions first. If no paper has been
+provided yet, ask the user to upload or paste one, then proceed.
+
 STEP 1 - EXTRACT. Read the document. For every entry in the reference list, pull
 out: title, the full list of author names in order, whether it ends in "et al.",
 year, DOI (only if printed), journal/venue, volume, issue, and page range. Also
@@ -269,8 +275,11 @@ def build():
     story.append(code(SCHEMA))
 
     story.append(Paragraph("Step 5 — Submit and test", H2))
-    story.append(Paragraph("Click Submit. In a chat, upload a paper and ask: “Check the "
-                           "citations in this paper against OpenAlex.”", BODY))
+    story.append(Paragraph("Click Submit. In a chat, upload a paper (or paste its reference "
+                           "list) and simply type “start” — the assistant will call your "
+                           "endpoint and return the verified table. Any short go-ahead works "
+                           "too (“go”, “check my citations”); the Detail description tells the "
+                           "assistant to treat these as the run signal.", BODY))
 
     story.append(PageBreak())
     story.append(Paragraph("What the endpoint returns", H2))
