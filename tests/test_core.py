@@ -168,3 +168,47 @@ def test_surname_extraction():
     assert surname("Smith, John A.") == "smith"
     assert surname("John A. Smith") == "smith"
     assert surname("") == ""
+
+
+def test_verify_endpoints(monkeypatch):
+    """The keyless extension endpoints wrap resolve_reference without an LLM."""
+    from fastapi.testclient import TestClient
+    from app import main
+
+    def fake_resolve(ref, api_key=None):
+        if "cheese" in (ref.get("title") or "").lower():
+            return {"status": "not_found", "work": None, "candidates": [], "notes": []}
+        return {"status": "found",
+                "work": {"title": ref["title"], "authors": ["Real Author"], "year": 2021,
+                         "venue": "Nature", "doi": None, "abstract": "x" * 5000, "url": "u"},
+                "candidates": [], "notes": ["ok"],
+                "field_check": [{"field": "year", "status": "mismatch",
+                                 "reference_value": ref.get("year"), "openalex_value": 2021}],
+                "field_mismatch_count": 1}
+
+    monkeypatch.setattr(main, "resolve_reference", fake_resolve)
+    client = TestClient(main.app)
+
+    r = client.post("/api/verify", json={"title": "A real paper", "year": 2019})
+    d = r.json()
+    assert r.status_code == 200
+    assert d["status"] == "found"
+    assert d["field_mismatch_count"] == 1
+    assert len(d["work"]["abstract"]) <= main.ABSTRACT_CAP + 1  # trimmed
+
+    rb = client.post("/api/verify_batch", json={"references": [
+        {"title": "A real paper", "year": 2019},
+        {"title": "Quantum cheese networks", "year": 2021},
+    ]})
+    b = rb.json()
+    assert b["count"] == 2
+    assert b["results"][0]["status"] == "found"
+    assert b["results"][1]["status"] == "not_found"
+
+
+def test_verify_batch_cap():
+    from fastapi.testclient import TestClient
+    from app import main
+    client = TestClient(main.app)
+    r = client.post("/api/verify_batch", json={"references": [{"title": "x"}] * 201})
+    assert r.status_code == 400

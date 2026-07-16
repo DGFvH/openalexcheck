@@ -22,8 +22,9 @@ import json
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -36,7 +37,16 @@ from .openalex import OpenAlexAuthError, resolve_reference
 
 app = FastAPI(title="openalexcheck", docs_url=None, redoc_url=None)
 
+# The /api/verify* endpoints are a public, keyless OpenAlex wrapper meant to be
+# called by external tools (e.g. an EduGenAI extension). No cookies/credentials
+# are used, so permissive CORS is safe.
+app.add_middleware(
+    CORSMiddleware, allow_origins=["*"], allow_methods=["POST", "GET", "OPTIONS"],
+    allow_headers=["*"], allow_credentials=False,
+)
+
 STATIC_DIR = Path(__file__).parent / "static"
+ABSTRACT_CAP = 3000  # trim abstracts in API responses to keep payloads small
 
 # Output-token cap per LLM call. Reasonable default; user-customizable.
 DEFAULT_MAX_TOKENS = 16000
@@ -216,6 +226,100 @@ def compare(req: CompareRequest):
     except LLMError as exc:
         raise HTTPException(502, redact(str(exc), req.api_key))
     return {"results": results}
+
+
+# ---------------------------------------------------------------------------
+# EduGenAI (and any tool-calling platform) extension API.
+#
+# A keyless, deterministic OpenAlex wrapper: no LLM runs here. The calling
+# platform's own model extracts references from the paper and does the misquote
+# reasoning; this endpoint just answers "does this work exist, and do the
+# printed details match?" plus returns the abstract for that reasoning.
+# ---------------------------------------------------------------------------
+
+class VerifyReference(BaseModel):
+    title: Optional[str] = None
+    authors: list[str] = Field(default_factory=list)
+    first_author_surname: Optional[str] = None
+    year: Optional[int] = None
+    doi: Optional[str] = None
+    journal: Optional[str] = None       # maps to OpenAlex "venue"
+    volume: Optional[str] = None
+    issue: Optional[str] = None
+    pages: Optional[str] = None
+    et_al: bool = False
+
+
+class VerifyRequest(VerifyReference):
+    openalex_key: Optional[str] = None  # optional; header X-OpenAlex-Key preferred
+
+
+class VerifyBatchRequest(BaseModel):
+    references: list[VerifyReference] = Field(default_factory=list)
+    openalex_key: Optional[str] = None
+
+
+def _ref_dict(v: VerifyReference, idx: int = 1) -> dict:
+    return {
+        "id": idx, "raw": "", "title": v.title, "authors": v.authors,
+        "first_author_surname": v.first_author_surname, "year": v.year,
+        "doi": v.doi, "container": v.journal, "volume": v.volume,
+        "issue": v.issue, "pages": v.pages, "et_al": v.et_al, "contexts": [],
+    }
+
+
+def _trim_abstract(work: Optional[dict]) -> Optional[dict]:
+    if not work:
+        return work
+    w = dict(work)
+    if w.get("abstract") and len(w["abstract"]) > ABSTRACT_CAP:
+        w["abstract"] = w["abstract"][:ABSTRACT_CAP] + "…"
+    return w
+
+
+def _verify_response(res: dict) -> dict:
+    return {
+        "status": res["status"],
+        "work": _trim_abstract(res.get("work")),
+        "field_check": res.get("field_check", []),
+        "field_mismatch_count": res.get("field_mismatch_count", 0),
+        "candidates": [_trim_abstract(c) for c in res.get("candidates", [])],
+        "notes": res.get("notes", []),
+    }
+
+
+@app.post("/api/verify")
+def api_verify(body: VerifyRequest, x_openalex_key: Optional[str] = Header(default=None)):
+    """Verify a single reference against OpenAlex. Returns existence, a field-by-
+    field metadata comparison, and the abstract. No LLM, no auth required."""
+    key = (x_openalex_key or body.openalex_key or "").strip() or None
+    try:
+        res = resolve_reference(_ref_dict(body), api_key=key)
+    except OpenAlexAuthError as exc:
+        raise HTTPException(400, redact(str(exc), key))
+    return _verify_response(res)
+
+
+@app.post("/api/verify_batch")
+def api_verify_batch(body: VerifyBatchRequest, x_openalex_key: Optional[str] = Header(default=None)):
+    """Verify many references in one call (preferred for a whole bibliography —
+    one round trip, and kinder to OpenAlex rate limits)."""
+    if len(body.references) > 200:
+        raise HTTPException(400, "Too many references in one request (max 200).")
+    key = (x_openalex_key or body.openalex_key or "").strip() or None
+    results = []
+    for i, ref in enumerate(body.references, 1):
+        try:
+            res = resolve_reference(_ref_dict(ref, i), api_key=key)
+        except OpenAlexAuthError as exc:
+            raise HTTPException(400, redact(str(exc), key))
+        results.append({"index": i, **_verify_response(res)})
+    return {"count": len(results), "results": results}
+
+
+@app.get("/edugenai")
+def edugenai():
+    return FileResponse(STATIC_DIR / "edugenai.html")
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

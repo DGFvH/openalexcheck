@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Use the Citation Checker in EduGenAI — Instructions</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>🔌</text></svg>">
+<style>
+  :root {
+    --bg: #f6f4ef; --card: #ffffff; --ink: #26241f; --muted: #6f6a5f;
+    --accent: #1f6f5c; --border: #e2ddd2; --code-bg: #2b2a27; --code-ink: #f3efe6;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Georgia, "Times New Roman", serif; background: var(--bg); color: var(--ink); line-height: 1.55; }
+  header { max-width: 820px; margin: 0 auto; padding: 2.4rem 1.5rem 0.5rem; }
+  main { max-width: 820px; margin: 0 auto; padding: 0 1.5rem 4rem; }
+  h1 { font-size: 1.9rem; margin: 0 0 .3rem; }
+  h1 em { color: var(--accent); font-style: italic; }
+  h2 { font-size: 1.25rem; margin: 2.2rem 0 .6rem; border-bottom: 2px solid var(--border); padding-bottom: .3rem; }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 .3rem; }
+  p, li { font-size: 1rem; }
+  .sub { color: var(--muted); margin: 0 0 1rem; }
+  .topbar { display: flex; gap: .7rem; flex-wrap: wrap; align-items: center; margin-top: 1rem; font-family: system-ui, sans-serif; }
+  a.btn { display: inline-block; background: var(--accent); color: #fff; text-decoration: none; padding: .55rem 1.1rem; border-radius: 7px; font-size: .9rem; }
+  a.btn.ghost { background: #fff; color: var(--accent); border: 1px solid var(--accent); }
+  a.back { color: var(--accent); font-family: system-ui, sans-serif; font-size: .88rem; text-decoration: none; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.1rem 1.4rem; margin: 1rem 0; }
+  .flow { font-family: system-ui, sans-serif; font-size: .9rem; }
+  .flow table { border-collapse: collapse; width: 100%; }
+  .flow th, .flow td { text-align: left; padding: .45rem .6rem; border-top: 1px solid var(--border); vertical-align: top; }
+  .flow th { color: var(--muted); font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; }
+  ol.steps { counter-reset: step; list-style: none; padding: 0; }
+  ol.steps > li { position: relative; padding: 0 0 1.3rem 3rem; }
+  ol.steps > li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 0; top: 0; width: 2rem; height: 2rem; border-radius: 50%;
+    background: var(--accent); color: #fff; font-family: system-ui, sans-serif; font-weight: 700;
+    display: flex; align-items: center; justify-content: center; font-size: .95rem;
+  }
+  ol.steps > li h3 { margin-top: .15rem; }
+  code.inline { background: #ece7db; padding: .1rem .35rem; border-radius: 4px; font-size: .9em; }
+  .codewrap { position: relative; margin: .7rem 0; }
+  pre { background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 1rem 1.1rem; overflow-x: auto; font-size: .82rem; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; line-height: 1.5; }
+  .copy { position: absolute; top: .5rem; right: .5rem; background: #ffffff22; color: #fff; border: 1px solid #ffffff44; border-radius: 5px; font-family: system-ui, sans-serif; font-size: .72rem; padding: .25rem .55rem; cursor: pointer; }
+  .copy:hover { background: #ffffff33; }
+  .field-label { font-family: system-ui, sans-serif; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: .6rem; }
+  .note { font-family: system-ui, sans-serif; font-size: .86rem; background: #fbf7ec; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: .6rem .9rem; margin: .8rem 0; }
+  footer { max-width: 820px; margin: 0 auto; padding: 1.5rem; color: var(--muted); font-family: system-ui, sans-serif; font-size: .82rem; }
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/">← Back to the Citation Checker</a>
+  <h1>Use the Citation Checker <em>in EduGenAI</em></h1>
+  <p class="sub">Register this tool as an EduGenAI <strong>Extension</strong> so the assistant can verify a paper's references against OpenAlex — inside your own EduGenAI chat, with no separate LLM key.</p>
+  <div class="topbar">
+    <a class="btn" href="/static/edugenai-instructions.pdf" download>⬇ Download PDF version</a>
+    <a class="btn ghost" href="/">Open the standalone tool</a>
+  </div>
+</header>
+<main>
+
+  <h2>How it works</h2>
+  <p>An EduGenAI Extension is a <strong>function-calling tool</strong>: you give EduGenAI an HTTP endpoint and a function definition, and its assistant calls that endpoint (as a JSON request) whenever it needs to. This citation checker splits cleanly across the two sides:</p>
+  <div class="card flow">
+    <table>
+      <tr><th>Step</th><th>Who does it</th></tr>
+      <tr><td>Read the paper, pull out the reference list and the sentences that cite each source</td><td><strong>EduGenAI's assistant</strong> — the paper is already in its chat context</td></tr>
+      <tr><td>Look each reference up in OpenAlex; check title, <strong>authors</strong>, year, journal, DOI, volume, issue, pages; return the abstract</td><td><strong>This extension endpoint</strong> — deterministic, no LLM</td></tr>
+      <tr><td>Compare the citing sentence to the abstract and flag misquotes</td><td><strong>EduGenAI's assistant</strong>, using the abstract the endpoint returned</td></tr>
+    </table>
+  </div>
+  <div class="note">Because the reasoning stays on EduGenAI's side, <strong>the extension needs no LLM API key</strong>. It only wraps OpenAlex, which is free. (An optional OpenAlex Premium key can be stored securely in the Headers / Azure Key Vault section — see Step 3.)</div>
+
+  <h2>Before you start</h2>
+  <p>You need this app deployed at a public HTTPS URL — EduGenAI calls it server-to-server. Everywhere below, replace <code class="inline" id="host-token">https://YOUR-DEPLOYMENT-HOST</code> with your deployment's address.</p>
+
+  <h2>Step by step</h2>
+  <ol class="steps">
+    <li>
+      <h3>Open the Extension builder</h3>
+      <p>In EduGenAI, create a new <strong>Extension</strong> (the panel with Name, Short description, Headers, and Functions).</p>
+    </li>
+    <li>
+      <h3>Name and describe it</h3>
+      <p><span class="field-label">Name</span></p>
+      <div class="codewrap"><pre id="c-name">OpenAlex Citation Verifier</pre><button class="copy" data-for="c-name">Copy</button></div>
+      <p><span class="field-label">Short description</span></p>
+      <div class="codewrap"><pre id="c-short">Verifies a paper's references against OpenAlex: checks that each work exists and that the printed title, authors, year, journal, DOI and pages match, and returns the abstract.</pre><button class="copy" data-for="c-short">Copy</button></div>
+      <p><span class="field-label">Detail description</span> — this is the instruction EduGenAI's assistant follows. Paste it verbatim:</p>
+      <div class="codewrap"><pre id="c-detail">Use this extension to fact-check the reference list of an uploaded paper.
+
+Workflow:
+1. Read the document and extract every entry in the reference list. For each, pull out: title, the full list of author names, year, DOI (only if printed), journal/venue, volume, issue, and page range. Also find the sentence(s) in the body where that source is cited, with one sentence of context on each side.
+2. Call the "verify_references" function with all references at once.
+3. For every reference the function returns:
+   - If status is "not_found", flag it as a POTENTIAL HALLUCINATION.
+   - If status is "fuzzy", tell the user the closest candidate(s) it returned.
+   - If "field_check" contains any field with status "mismatch", report exactly which printed details are wrong (especially authors and year), showing the reference value vs the OpenAlex value.
+   - Using the returned "abstract", judge whether the student's citing sentence matches what the paper is actually about. If the paper is on a different topic than the student implies, flag it as a MISQUOTE and explain the mismatch in one sentence.
+4. Present the results as a table sorted worst-first: hallucinations, then wrong authors/DOI/title, then misquotes, then wrong year, then minor field mismatches, then clean references. Never invent a DOI, author, or verdict that the function did not return.</pre><button class="copy" data-for="c-detail">Copy</button></div>
+    </li>
+    <li>
+      <h3>Add the Header</h3>
+      <p>In the <strong>Headers</strong> section, add one header so the endpoint receives JSON:</p>
+      <div class="card flow"><table>
+        <tr><th>Key</th><th>Value</th></tr>
+        <tr><td><code class="inline">Content-Type</code></td><td><code class="inline">application/json</code></td></tr>
+      </table></div>
+      <p><strong>Optional — OpenAlex Premium:</strong> if you have an OpenAlex Premium key and want higher rate limits, add a second header <code class="inline">X-OpenAlex-Key</code> and paste the key as its value. Use the <em>Secure header values</em> option so it is stored in Azure Key Vault, not in plain text.</p>
+    </li>
+    <li>
+      <h3>Add the function</h3>
+      <p>Under <strong>Functions</strong>, add a function that points at the batch endpoint.</p>
+      <p><span class="field-label">Method &amp; URL</span></p>
+      <div class="codewrap"><pre id="c-url">POST  https://YOUR-DEPLOYMENT-HOST/api/verify_batch</pre><button class="copy" data-for="c-url">Copy</button></div>
+      <p><span class="field-label">Function definition (name, description, JSON parameters)</span></p>
+      <div class="codewrap"><pre id="c-schema">{
+  "name": "verify_references",
+  "description": "Verify a list of bibliographic references against OpenAlex. For each reference, returns whether the work exists (found / fuzzy / not_found), a field-by-field comparison of the printed metadata (title, authors, year, journal, DOI, volume, issue, pages) against the real record, and the abstract of the matched work.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "references": {
+        "type": "array",
+        "description": "Every reference in the paper's bibliography.",
+        "items": {
+          "type": "object",
+          "properties": {
+            "title":   { "type": "string", "description": "The work's title." },
+            "authors": { "type": "array", "items": { "type": "string" }, "description": "Every author name printed, in order, e.g. 'Smith, J.'." },
+            "et_al":   { "type": "boolean", "description": "True if the reference abbreviates the author list with 'et al.'." },
+            "year":    { "type": "integer" },
+            "doi":     { "type": "string", "description": "Only if printed in the reference." },
+            "journal": { "type": "string", "description": "Journal or venue name." },
+            "volume":  { "type": "string" },
+            "issue":   { "type": "string" },
+            "pages":   { "type": "string", "description": "Page range as printed, e.g. '123-145'." }
+          },
+          "required": ["title"]
+        }
+      }
+    },
+    "required": ["references"]
+  }
+}</pre><button class="copy" data-for="c-schema">Copy</button></div>
+    </li>
+    <li>
+      <h3>Submit and test</h3>
+      <p>Click <strong>Submit</strong>. Then, in an EduGenAI chat, upload a paper (or paste its reference list) and ask: <em>“Check the citations in this paper against OpenAlex.”</em> The assistant will call your endpoint and return the verified table.</p>
+    </li>
+  </ol>
+
+  <h2>What the endpoint returns</h2>
+  <p>Example request EduGenAI sends to <code class="inline">/api/verify_batch</code>:</p>
+  <div class="codewrap"><pre id="c-req">{
+  "references": [
+    {
+      "title": "Highly accurate protein structure prediction with AlphaFold",
+      "authors": ["Smith, J.", "Jones, B."],
+      "et_al": false,
+      "year": 2019,
+      "journal": "Science",
+      "pages": "100-110"
+    }
+  ]
+}</pre><button class="copy" data-for="c-req">Copy</button></div>
+  <p>Example response (abbreviated) — note the wrong authors, year, and journal are caught, and the abstract is returned for the misquote step:</p>
+  <div class="codewrap"><pre id="c-resp">{
+  "count": 1,
+  "results": [
+    {
+      "index": 1,
+      "status": "found",
+      "work": {
+        "title": "Highly accurate protein structure prediction with AlphaFold",
+        "authors": ["John Jumper", "Richard Evans", "..."],
+        "year": 2021,
+        "venue": "Nature",
+        "doi": "10.1038/s41586-021-03819-2",
+        "url": "https://doi.org/10.1038/s41586-021-03819-2",
+        "abstract": "Proteins are essential to life ... (returned for the misquote check)"
+      },
+      "field_mismatch_count": 3,
+      "field_check": [
+        { "field": "title",   "status": "match" },
+        { "field": "authors", "status": "mismatch", "reference_value": "Smith, J., Jones, B.", "openalex_value": "John Jumper, Richard Evans, ...", "detail": "Not on the record: Smith, J., Jones, B." },
+        { "field": "year",    "status": "mismatch", "reference_value": 2019, "openalex_value": 2021 },
+        { "field": "journal", "status": "mismatch", "reference_value": "Science", "openalex_value": "Nature" }
+      ],
+      "notes": ["Metadata mismatch on: authors, year, journal. The work exists but the citation details differ."]
+    }
+  ]
+}</pre><button class="copy" data-for="c-resp">Copy</button></div>
+
+  <div class="note"><strong>A single-reference endpoint</strong> is also available at <code class="inline">POST /api/verify</code> — same fields, but without the outer <code class="inline">references</code> array — if you prefer one call per reference. The batch endpoint is recommended for a whole bibliography (one round trip, kinder to OpenAlex's rate limits).</div>
+
+  <h2>Notes &amp; limits</h2>
+  <ul>
+    <li>No LLM key is stored or used by the extension; OpenAlex is free and needs no key.</li>
+    <li>The metadata check compares against OpenAlex's canonical record. Occasionally OpenAlex's year differs from the printed year (e.g. online-first vs issue year) — treat a lone year mismatch as a prompt to double-check, not a verdict.</li>
+    <li>The misquote judgement is based on the <em>abstract</em> only, so a claim supported by the full text but not the abstract may read as uncertain. These are leads for a human reviewer.</li>
+    <li>Batch requests are capped at 200 references.</li>
+  </ul>
+
+</main>
+<footer>
+  This page is served by the Citation Checker itself, at <code>/edugenai</code>. The PDF version contains the same instructions.
+</footer>
+<script>
+  // Show the real deployment host in the copyable snippets when served live.
+  (function () {
+    var origin = window.location.origin;
+    if (!/^https?:\/\//.test(origin)) return;
+    document.querySelectorAll("#host-token").forEach(function (el) { el.textContent = origin; });
+    ["c-url"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.textContent = el.textContent.replace("https://YOUR-DEPLOYMENT-HOST", origin);
+    });
+  })();
+  document.querySelectorAll(".copy").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var el = document.getElementById(btn.dataset.for);
+      navigator.clipboard.writeText(el.innerText).then(function () {
+        var t = btn.textContent; btn.textContent = "Copied ✓";
+        setTimeout(function () { btn.textContent = t; }, 1200);
+      });
+    });
+  });
+</script>
+</body>
+</html>

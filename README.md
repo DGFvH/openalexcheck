@@ -103,6 +103,31 @@ Both keys (LLM and optional OpenAlex) are strictly one-time use:
   as unclear or a likely mismatch. Treat verdicts as leads for a human
   reviewer, not as final judgements.
 
+## Use it inside EduGenAI (extension)
+
+This app doubles as a backend for an EduGenAI (or any function-calling)
+extension. Two keyless JSON endpoints wrap the OpenAlex verification — no LLM
+runs server-side, so the extension needs no API key:
+
+- `POST /api/verify` — verify one reference; returns existence, a field-by-field
+  metadata comparison (title, authors, year, journal, DOI, volume, issue,
+  pages), and the abstract.
+- `POST /api/verify_batch` — verify a whole bibliography in one call (max 200).
+
+The calling platform's own model extracts references from the paper and does
+the misquote reasoning with the returned abstracts. An optional OpenAlex
+Premium key can be supplied via the `X-OpenAlex-Key` header (ideal for the
+extension's secure/Key-Vault header store).
+
+Step-by-step setup instructions (with the exact function schema and a
+downloadable PDF) are served by the app itself at **`/edugenai`**, and linked
+from the main page. To regenerate the PDF after editing the instructions:
+
+```bash
+pip install -r requirements-dev.txt
+python scripts/build_edugenai_pdf.py
+```
+
 ## Tests
 
 ```bash
