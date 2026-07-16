@@ -30,7 +30,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 from .analysis import compare_contexts, extract_references
 from .extract import ExtractionError, extract_text
@@ -246,30 +246,81 @@ def compare(req: CompareRequest):
 # printed details match?" plus returns the abstract for that reasoning.
 # ---------------------------------------------------------------------------
 
-# The request models accept ANY type per field. Real LLM-extracted references
-# are messy — a year of "n.d." or "forthcoming", a numeric volume, authors as a
-# single string — and rejecting them with a 422 would fail the whole batch. We
-# never reject on type; _coerce_ref() normalizes each field leniently instead.
-class VerifyRequest(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    title: Any = None
-    authors: Any = None
-    first_author_surname: Any = None
-    year: Any = None
-    doi: Any = None
-    journal: Any = None
-    container: Any = None  # accepted as an alias for 'journal'
-    volume: Any = None
-    issue: Any = None
-    pages: Any = None
-    et_al: Any = False
-    openalex_key: Optional[str] = None  # optional; header X-OpenAlex-Key preferred
+# The /api/verify* endpoints face an LLM (an EduGenAI extension or any
+# function-caller), so the request body arrives in whatever shape the model
+# decided to emit: a stringified JSON array, a bare top-level array, a single
+# reference object, args nested under "body"/"arguments", a non-string key,
+# messy field types. Validating with Pydantic would 422 and fail the whole
+# call — instead we read the raw body and normalize it ourselves, never
+# rejecting on shape; _coerce_ref() then normalizes each field leniently.
+
+async def _read_json(request: Request) -> Any:
+    """Best-effort parse of the request body as JSON, tolerating a wrong or
+    missing Content-Type (some callers POST JSON as text/plain)."""
+    try:
+        return await request.json()
+    except Exception:
+        raw = (await request.body()).decode("utf-8", "replace").strip()
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except Exception:
+            return raw
 
 
-class VerifyBatchRequest(BaseModel):
-    model_config = ConfigDict(extra="ignore")
-    references: list[Any] = Field(default_factory=list)
-    openalex_key: Optional[str] = None
+def _loads_maybe(v: Any) -> Any:
+    """If v is a string that looks like JSON, parse it; otherwise return as-is.
+    LLM function-callers frequently serialize array/object arguments as strings."""
+    if isinstance(v, str):
+        s = v.strip()
+        if s[:1] in ("[", "{"):
+            try:
+                return json.loads(s)
+            except Exception:
+                return v
+    return v
+
+
+_REF_KEYS = {"title", "doi", "authors", "author", "first_author_surname",
+             "year", "journal", "container", "volume", "issue", "pages", "et_al"}
+
+
+def _looks_like_ref(d: Any) -> bool:
+    return isinstance(d, dict) and any(k in d for k in _REF_KEYS)
+
+
+def _as_key(v: Any) -> Optional[str]:
+    """An OpenAlex key is always a string; anything else is caller junk -> ignore."""
+    return (v.strip() or None) if isinstance(v, str) else None
+
+
+def _normalize_batch(payload: Any, _depth: int = 0) -> tuple[list, Optional[str]]:
+    """Reduce any reasonable request shape to (references_list, openalex_key).
+    Handles: stringified JSON, a bare array, {"references": [...]}, a single
+    reference object, and one level of common wrappers (body/arguments/…)."""
+    payload = _loads_maybe(payload)
+    if isinstance(payload, list):
+        return payload, None
+    if not isinstance(payload, dict):
+        return [], None
+    key = _as_key(payload.get("openalex_key"))
+    refs = _loads_maybe(payload.get("references"))
+    if isinstance(refs, dict):
+        return [refs], key
+    if isinstance(refs, list):
+        return refs, key
+    # No usable 'references' key — try common function-call wrappers…
+    if _depth < 3:
+        for wrap in ("body", "input", "arguments", "data", "payload", "request"):
+            if wrap in payload:
+                inner_refs, inner_key = _normalize_batch(payload[wrap], _depth + 1)
+                if inner_refs:
+                    return inner_refs, (key or inner_key)
+    # …otherwise the object itself may BE a single reference.
+    if _looks_like_ref(payload):
+        return [payload], key
+    return [], key
 
 
 def _as_str(v: Any) -> Optional[str]:
@@ -399,20 +450,22 @@ def _verify_response(res: dict) -> dict:
 
 
 @app.post("/api/verify")
-def api_verify(body: VerifyRequest, x_openalex_key: Optional[str] = Header(default=None)):
+async def api_verify(request: Request, x_openalex_key: Optional[str] = Header(default=None)):
     """Verify a single reference against OpenAlex. Returns existence, a field-by-
     field metadata comparison, and the abstract. No LLM, no auth required.
-    Accepts messy input — fields are coerced, never rejected."""
-    key = (x_openalex_key or body.openalex_key or "").strip() or None
-    ref = _coerce_ref(body.model_dump(exclude={"openalex_key"}), 1)
+    Accepts any body shape an LLM might send — never rejects on shape or type."""
+    references, body_key = _normalize_batch(await _read_json(request))
+    key = (x_openalex_key or body_key or "").strip() or None
+    first = references[0] if references and isinstance(references[0], dict) else {}
     try:
-        res = _safe_resolve(ref, key)
+        res = _safe_resolve(_coerce_ref(first, 1), key)
     except OpenAlexAuthError as exc:
         raise HTTPException(400, redact(str(exc), key))
     return _verify_response(res)
 
 
 def _batch_item(idx: int, raw: Any, key: Optional[str]) -> dict:
+    raw = _loads_maybe(raw)  # a reference item may itself be stringified JSON
     if not isinstance(raw, dict):
         res = {"status": "lookup_failed", "work": None, "candidates": [],
                "notes": ["This entry could not be read as a reference object."]}
@@ -422,14 +475,16 @@ def _batch_item(idx: int, raw: Any, key: Optional[str]) -> dict:
 
 
 @app.post("/api/verify_batch")
-def api_verify_batch(body: VerifyBatchRequest, x_openalex_key: Optional[str] = Header(default=None)):
+async def api_verify_batch(request: Request, x_openalex_key: Optional[str] = Header(default=None)):
     """Verify many references in one call (preferred for a whole bibliography —
-    one round trip). Malformed entries are reported per-reference, never failing
-    the whole batch; lookups run in parallel to keep a big bibliography fast."""
-    if len(body.references) > 200:
+    one round trip). Accepts any body shape an LLM might send; malformed entries
+    are reported per-reference, never failing the whole batch; lookups run in
+    parallel to keep a big bibliography fast."""
+    references, body_key = _normalize_batch(await _read_json(request))
+    if len(references) > 200:
         raise HTTPException(400, "Too many references in one request (max 200).")
-    key = (x_openalex_key or body.openalex_key or "").strip() or None
-    items = list(enumerate(body.references, 1))
+    key = (x_openalex_key or body_key or "").strip() or None
+    items = list(enumerate(references, 1))
     try:
         with ThreadPoolExecutor(max_workers=6) as pool:
             results = list(pool.map(lambda it: _batch_item(it[0], it[1], key), items))

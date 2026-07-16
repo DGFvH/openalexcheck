@@ -273,6 +273,73 @@ def test_verify_accepts_messy_llm_input(monkeypatch):
     assert b["results"][2]["status"] == "found"
 
 
+def test_verify_tolerates_any_request_shape(monkeypatch):
+    """An LLM function-caller may send the body in shapes that a strict schema
+    rejects with 422: a stringified references array, a bare top-level array, the
+    whole body as a JSON string, a non-string openalex_key, reference items that
+    are themselves stringified JSON, or args nested under a wrapper key. Every one
+    of these must be normalized to a 200 result, never a 422."""
+    import json as _json
+    from fastapi.testclient import TestClient
+    from app import main
+
+    seen = {"key": "sentinel"}
+
+    def fake_resolve(ref, api_key=None):
+        seen["key"] = api_key
+        return {"status": "found",
+                "work": {"title": ref.get("title"), "authors": [], "year": None,
+                         "venue": None, "doi": None, "abstract": None, "url": "u"},
+                "candidates": [], "notes": [], "field_check": [], "field_mismatch_count": 0}
+
+    monkeypatch.setattr(main, "resolve_reference", fake_resolve)
+    client = TestClient(main.app)
+    H = {"Content-Type": "application/json"}
+
+    def post(path, raw_body):
+        return client.post(path, content=raw_body, headers=H)
+
+    # H1: references as a STRINGIFIED JSON array (the most common EduGenAI shape).
+    r = post("/api/verify_batch", '{"references":"[{\\"title\\":\\"A\\"},{\\"title\\":\\"B\\"}]"}')
+    assert r.status_code == 200 and r.json()["count"] == 2
+
+    # H2: a bare top-level array as the whole body.
+    r = post("/api/verify_batch", '[{"title":"A"},{"title":"B"},{"title":"C"}]')
+    assert r.status_code == 200 and r.json()["count"] == 3
+
+    # H6: the ENTIRE body serialized as a JSON string.
+    r = post("/api/verify_batch", _json.dumps(_json.dumps({"references": [{"title": "A"}]})))
+    assert r.status_code == 200 and r.json()["count"] == 1
+
+    # H5: a non-string openalex_key must be ignored, not 422 (and never used as a key).
+    r = post("/api/verify_batch", '{"references":[{"title":"A"}],"openalex_key":{}}')
+    assert r.status_code == 200 and r.json()["count"] == 1
+    assert seen["key"] is None  # junk key dropped
+
+    # Reference item that is itself a stringified JSON object.
+    r = post("/api/verify_batch", '{"references":["{\\"title\\":\\"A\\"}"]}')
+    assert r.status_code == 200
+    assert r.json()["results"][0]["status"] == "found"  # parsed, not lookup_failed
+
+    # H7: args nested under a function-call wrapper key.
+    r = post("/api/verify_batch", '{"body":{"references":[{"title":"A"},{"title":"B"}]}}')
+    assert r.status_code == 200 and r.json()["count"] == 2
+
+    # A single reference object POSTed to the batch endpoint (no 'references' wrapper).
+    r = post("/api/verify_batch", '{"title":"A single ref","year":"2020"}')
+    assert r.status_code == 200 and r.json()["count"] == 1
+
+    # Single endpoint: a bare reference object, and a string openalex_key that IS used.
+    r = post("/api/verify", '{"title":"Solo","openalex_key":"real-key-123"}')
+    assert r.status_code == 200 and r.json()["status"] == "found"
+    assert seen["key"] == "real-key-123"
+
+    # Wrong Content-Type (JSON posted as text/plain) is still parsed.
+    r = client.post("/api/verify_batch", content='{"references":[{"title":"A"}]}',
+                    headers={"Content-Type": "text/plain"})
+    assert r.status_code == 200 and r.json()["count"] == 1
+
+
 def test_parse_json_handles_braces_inside_strings():
     from app.llm import _parse_json
     # A citation context containing math braces must not break brace matching.
