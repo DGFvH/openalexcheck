@@ -43,27 +43,61 @@
   .credit-links { display: inline-flex; gap: .5rem; justify-content: flex-end; }
   .credit-links a { color: var(--muted); display: inline-flex; transition: color .15s; }
   .credit-links a:hover { color: var(--accent); }
-  button.stop { margin-top: 1.3rem; margin-left: .6rem; background: #fff; color: var(--bad); border: 1px solid var(--bad); border-radius: 6px; padding: .65rem 1.2rem; font: inherit; font-family: system-ui, sans-serif; font-size: .95rem; cursor: pointer; }
+  button.stop { margin-top: 1.3rem; margin-left: .6rem; background: #fff; color: var(--bad); border: 1px solid var(--bad); border-radius: 8px; padding: .65rem 1.2rem; font: inherit; font-family: system-ui, sans-serif; font-size: .95rem; cursor: pointer; }
   button.stop:hover { background: var(--bad); color: #fff; }
-  button.sample { margin-top: 1.3rem; margin-left: .6rem; background: #e8e4da; color: #4a463d; border: 1px solid var(--border); border-radius: 6px; padding: .65rem 1.2rem; font: inherit; font-family: system-ui, sans-serif; font-size: .95rem; cursor: pointer; }
+  button.sample { margin-top: 1.3rem; margin-left: .6rem; background: #e8e4da; color: #4a463d; border: 1px solid var(--border); border-radius: 8px; padding: .65rem 1.2rem; font: inherit; font-family: system-ui, sans-serif; font-size: .95rem; cursor: pointer; }
   button.sample:hover { background: #ddd7c9; }
   .sample-banner { font-family: system-ui, sans-serif; font-size: .85rem; background: #eef0ee; border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 6px; padding: .6rem .9rem; margin-top: 1rem; color: var(--ink); }
   main { max-width: min(960px, 94%); margin: 0 auto; padding: 0 1.5rem 4rem; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.3rem 1.5rem; margin-top: 1.2rem; }
-  label { display: block; font-size: .85rem; color: var(--muted); margin: .9rem 0 .25rem; font-family: system-ui, sans-serif; }
-  input[type=file], input[type=password], input[type=text], select {
-    width: 100%; padding: .55rem .7rem; border: 1px solid var(--border); border-radius: 6px;
+  label { display: block; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: .9rem 0 .3rem; font-family: system-ui, sans-serif; }
+  input[type=file], input[type=password], input[type=text], input[type=number], select {
+    width: 100%; padding: .6rem .75rem; border: 1px solid var(--border); border-radius: 8px;
     font: inherit; font-family: system-ui, sans-serif; font-size: .9rem; background: #fff;
+    transition: border-color .15s, box-shadow .15s;
   }
+  input:hover, select:hover { border-color: #cfc9bb; }
+  input:focus, select:focus {
+    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(31, 111, 92, .14);
+  }
+  /* Selects: custom chevron so they match the text inputs. */
+  select {
+    appearance: none; -webkit-appearance: none; padding-right: 2.2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%236f6a5f' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right .8rem center;
+  }
+  /* File input as an upload zone with a styled chooser button. */
+  input[type=file] {
+    border-style: dashed; border-width: 1.5px; background: #fcfbf8;
+    padding: .8rem .9rem; cursor: pointer; color: var(--muted);
+  }
+  input[type=file]:hover { border-color: var(--accent); }
+  input[type=file]::file-selector-button {
+    background: #fff; color: var(--accent); border: 1px solid var(--accent); border-radius: 6px;
+    padding: .45rem .95rem; margin-right: .9rem; font: inherit; font-family: system-ui, sans-serif;
+    font-size: .88rem; cursor: pointer; transition: background .15s, color .15s;
+  }
+  input[type=file]::file-selector-button:hover { background: var(--accent); color: #fff; }
   .row { display: flex; gap: 1rem; flex-wrap: wrap; }
   .row > div { flex: 1 1 220px; }
-  .checks { display: flex; gap: 1.6rem; margin-top: 1rem; flex-wrap: wrap; font-family: system-ui, sans-serif; font-size: .92rem; }
-  .checks label { display: flex; align-items: flex-start; gap: .5rem; margin: 0; color: var(--ink); font-size: .92rem; cursor: pointer; }
+  /* The two checks as toggle tiles: bordered cards that light up when ticked. */
+  .checks { display: flex; gap: 1rem; margin-top: 1.2rem; flex-wrap: wrap; font-family: system-ui, sans-serif; font-size: .92rem; }
+  .checks label {
+    flex: 1 1 260px; display: flex; align-items: flex-start; gap: .6rem; margin: 0;
+    color: var(--ink); font-size: .92rem; font-weight: 400; text-transform: none; letter-spacing: 0;
+    cursor: pointer; border: 1px solid var(--border); border-radius: 8px; padding: .75rem .9rem;
+    background: #fff; transition: border-color .15s, background .15s;
+  }
+  .checks label:hover { border-color: #b9ccc4; }
+  .checks label:has(input:checked) { border-color: var(--accent); background: #f0f6f3; }
+  .checks input[type=checkbox] { accent-color: var(--accent); margin-top: .2rem; }
   .checks small { display: block; color: var(--muted); }
   button.primary {
-    margin-top: 1.3rem; background: var(--accent); color: #fff; border: 0; border-radius: 6px;
+    margin-top: 1.3rem; background: var(--accent); color: #fff; border: 0; border-radius: 8px;
     padding: .65rem 1.4rem; font: inherit; font-family: system-ui, sans-serif; font-size: .95rem; cursor: pointer;
+    transition: background .15s;
   }
+  button.primary:hover:not(:disabled) { background: #1a5f4f; }
   button.primary:disabled { opacity: .55; cursor: wait; }
   .keynote { font-size: .78rem; color: var(--muted); font-family: system-ui, sans-serif; margin-top: .3rem; }
   .privacy { margin-top: 1.2rem; font-family: system-ui, sans-serif; font-size: .82rem; color: var(--muted); }
