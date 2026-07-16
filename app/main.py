@@ -262,7 +262,8 @@ def compare(req: CompareRequest):
 
 async def _read_json(request: Request) -> Any:
     """Best-effort parse of the request body as JSON, tolerating a wrong or
-    missing Content-Type (some callers POST JSON as text/plain)."""
+    missing Content-Type (some callers POST JSON as text/plain) and a
+    form-encoded body (key=value&… with JSON inside the values)."""
     try:
         return await request.json()
     except Exception:
@@ -272,7 +273,16 @@ async def _read_json(request: Request) -> Any:
         try:
             return json.loads(raw)
         except Exception:
-            return raw
+            pass
+        if "=" in raw and raw[:1] not in ("[", "{"):
+            from urllib.parse import parse_qs
+            try:
+                pairs = parse_qs(raw, keep_blank_values=True)
+                if pairs:
+                    return {k: _loads_maybe(v[-1]) for k, v in pairs.items()}
+            except Exception:
+                pass
+        return raw
 
 
 def _loads_maybe(v: Any) -> Any:

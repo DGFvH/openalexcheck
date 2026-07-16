@@ -409,6 +409,13 @@ def test_verify_tolerates_any_request_shape(monkeypatch):
     r = post("/api/verify_batch", '{"tags":["alpha","beta"],"query":"Start"}')
     assert r.status_code == 200 and r.json()["count"] == 0
 
+    # A form-encoded body with the JSON inside a value is unwrapped too.
+    from urllib.parse import quote
+    r = client.post("/api/verify_batch",
+                    content="references=" + quote('[{"title":"A"},{"title":"B"}]'),
+                    headers={"Content-Type": "application/x-www-form-urlencoded"})
+    assert r.status_code == 200 and r.json()["count"] == 2
+
 
 def test_parse_json_handles_braces_inside_strings():
     from app.llm import _parse_json

@@ -57,13 +57,30 @@ DETAIL = """Use this extension to fact-check the reference list of an uploaded p
 TRIGGER - WHEN TO RUN. Run all four steps below end to end, WITHOUT asking any
 clarifying question first, whenever the user gives ANY go-ahead while a document
 is present in the conversation. Triggers include (not exhaustive): "start",
-"go", "run", "check", "verify", "start the extension", "run the extension",
-"start the references extension", "start the reference verification", "check my
-citations", "verify my references", any message containing "start" or "run"
-together with "extension" or "references", or a paper uploaded with no other
-instruction. Never respond to a trigger with a greeting, a menu of options, or a
-request to paste the bibliography - the document already in the conversation IS
-the input. Only if NO document has been provided at all, ask for one, then run.
+"go", "run", "check", "verify", "start the check", "start the extension", "run
+the extension", "start the references extension", "start the reference
+verification", "check my citations", "verify my references", any message
+containing "start" or "run" together with "check", "extension" or "references",
+or a paper uploaded with no other instruction. Never respond to a trigger with a
+greeting, a menu of options, or a request to paste the bibliography - the
+document already in the conversation IS the input. Only if NO document has been
+provided at all, ask for one, then run.
+
+AUDIENCE. The user is a marker / examiner / supervisor checking SOMEONE ELSE'S
+paper (typically a student's). Never address the user as the paper's author:
+write "the paper" or "the student's paper", never "your paper" / "you cite".
+Report findings as facts for a reviewer. Never give feedback or improvement
+advice to the writer.
+
+OUTPUT DISCIPLINE. Produce ONLY the output defined in Step 4 - the table, the
+Details section, the Missing-references section when relevant, and the one-line
+summary. NOTHING else: no APA or formatting critique, no style fixes, no
+suggested extra literature, no praise, no summary of what the paper is about,
+no advice - unless the user explicitly asks for such things in a later message.
+If the function call fails or returns an empty result, say exactly that in one
+or two sentences ("the verification service returned no data, so the references
+could not be checked - try again") and STOP: do not substitute an APA review, a
+plausibility opinion, or any other unrequested analysis.
 
 STEP 1 - EXTRACT. Read the document. For every entry in the reference list, pull
 out: title, the full list of author names in order, whether it ends in "et al.",
@@ -91,12 +108,15 @@ variation such as an abbreviated journal name, or "mismatch"), the matched
 matches only, where "work" is null and "field_check" is empty - a "candidates"
 array of the closest works (each with title, authors, year, venue, doi, url).
 
-STEP 3 - JUDGE MISQUOTES. For each reference whose status is "found", compare the
-citation sentence(s) you kept in Step 1 with the returned "abstract". If the
-student uses the source as though it were about a different topic than the
-abstract shows, that is a MISQUOTE; otherwise it is consistent. If there is no
-abstract, or the reference is never cited, the misquote check is "unclear". Never
-invent a verdict.
+STEP 3 - JUDGE MISQUOTES (THE CORE OF THIS TOOL - NEVER SKIP). This comparison is
+the main reason the user runs the check. For EVERY reference whose status is
+"found" and whose returned "abstract" is non-empty, you MUST compare the citation
+sentence(s) you kept in Step 1 against that abstract and produce a real verdict:
+if the paper uses the source as though it were about a different topic than the
+abstract shows, that is a MISQUOTE; otherwise it is consistent. Writing "-" in
+the Misquote column for a found row that has an abstract is an ERROR. Only when
+there is no abstract, or the reference is never cited in the body, is the
+verdict "unclear". Never invent a verdict.
 
 STEP 4 - PRESENT (follow this format exactly). The user must NEVER see the raw
 JSON from the function - it is a machine interface. Convert it into ONE readable
