@@ -19,16 +19,18 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .analysis import compare_contexts, extract_references
 from .extract import ExtractionError, extract_text
@@ -244,35 +246,102 @@ def compare(req: CompareRequest):
 # printed details match?" plus returns the abstract for that reasoning.
 # ---------------------------------------------------------------------------
 
-class VerifyReference(BaseModel):
-    title: Optional[str] = None
-    authors: list[str] = Field(default_factory=list)
-    first_author_surname: Optional[str] = None
-    year: Optional[int] = None
-    doi: Optional[str] = None
-    journal: Optional[str] = None       # maps to OpenAlex "venue"
-    volume: Optional[str] = None
-    issue: Optional[str] = None
-    pages: Optional[str] = None
-    et_al: bool = False
-
-
-class VerifyRequest(VerifyReference):
+# The request models accept ANY type per field. Real LLM-extracted references
+# are messy — a year of "n.d." or "forthcoming", a numeric volume, authors as a
+# single string — and rejecting them with a 422 would fail the whole batch. We
+# never reject on type; _coerce_ref() normalizes each field leniently instead.
+class VerifyRequest(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    title: Any = None
+    authors: Any = None
+    first_author_surname: Any = None
+    year: Any = None
+    doi: Any = None
+    journal: Any = None
+    container: Any = None  # accepted as an alias for 'journal'
+    volume: Any = None
+    issue: Any = None
+    pages: Any = None
+    et_al: Any = False
     openalex_key: Optional[str] = None  # optional; header X-OpenAlex-Key preferred
 
 
 class VerifyBatchRequest(BaseModel):
-    references: list[VerifyReference] = Field(default_factory=list)
+    model_config = ConfigDict(extra="ignore")
+    references: list[Any] = Field(default_factory=list)
     openalex_key: Optional[str] = None
 
 
-def _ref_dict(v: VerifyReference, idx: int = 1) -> dict:
+def _as_str(v: Any) -> Optional[str]:
+    if v is None:
+        return None
+    s = str(v).strip()
+    return s or None
+
+
+def _as_year(v: Any) -> Optional[int]:
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, int):
+        return v
+    m = re.search(r"\b(1[5-9]\d\d|20\d\d|21\d\d)\b", str(v))  # a plausible 4-digit year
+    return int(m.group(1)) if m else None
+
+
+def _as_authors(v: Any) -> list[str]:
+    if v is None:
+        return []
+    if isinstance(v, str):
+        # Split on separators that don't collide with "Surname, F." — semicolons,
+        # ampersands, and the word "and". Commas inside names are left intact.
+        parts = re.split(r"\s*;\s*|\s*&\s*|\s+and\s+", v)
+        return [p.strip() for p in parts if p.strip()]
+    if isinstance(v, (list, tuple)):
+        out = []
+        for a in v:
+            if isinstance(a, str):
+                if a.strip():
+                    out.append(a.strip())
+            elif isinstance(a, dict):
+                name = a.get("name") or a.get("display_name") or a.get("family") or a.get("last")
+                if name:
+                    out.append(str(name).strip())
+            elif a is not None:
+                out.append(str(a).strip())
+        return out
+    return [str(v).strip()]
+
+
+def _coerce_ref(raw: dict, idx: int = 1) -> dict:
+    """Normalize a raw reference object (whatever shape the caller sent) into the
+    dict resolve_reference expects. Never raises."""
+    journal = raw.get("journal")
+    if journal is None:
+        journal = raw.get("container")
     return {
-        "id": idx, "raw": "", "title": v.title, "authors": v.authors,
-        "first_author_surname": v.first_author_surname, "year": v.year,
-        "doi": v.doi, "container": v.journal, "volume": v.volume,
-        "issue": v.issue, "pages": v.pages, "et_al": v.et_al, "contexts": [],
+        "id": idx, "raw": "", "title": _as_str(raw.get("title")),
+        "authors": _as_authors(raw.get("authors")),
+        "first_author_surname": _as_str(raw.get("first_author_surname")),
+        "year": _as_year(raw.get("year")), "doi": _as_str(raw.get("doi")),
+        "container": _as_str(journal), "volume": _as_str(raw.get("volume")),
+        "issue": _as_str(raw.get("issue")), "pages": _as_str(raw.get("pages")),
+        "et_al": bool(raw.get("et_al")), "contexts": [],
     }
+
+
+def _safe_resolve(ref: dict, key: Optional[str]) -> dict:
+    """resolve_reference that never raises (except on a bad API key, which is a
+    global config error worth surfacing) — a single odd reference must not sink
+    the whole batch."""
+    try:
+        return resolve_reference(ref, api_key=key)
+    except OpenAlexAuthError:
+        raise
+    except Exception as exc:  # network oddities, unexpected data shapes, etc.
+        return {"status": "lookup_failed", "work": None, "candidates": [],
+                "notes": [redact(f"This reference could not be verified: {exc}", key)]}
 
 
 def _trim_abstract(work: Optional[dict]) -> Optional[dict]:
@@ -332,29 +401,40 @@ def _verify_response(res: dict) -> dict:
 @app.post("/api/verify")
 def api_verify(body: VerifyRequest, x_openalex_key: Optional[str] = Header(default=None)):
     """Verify a single reference against OpenAlex. Returns existence, a field-by-
-    field metadata comparison, and the abstract. No LLM, no auth required."""
+    field metadata comparison, and the abstract. No LLM, no auth required.
+    Accepts messy input — fields are coerced, never rejected."""
     key = (x_openalex_key or body.openalex_key or "").strip() or None
+    ref = _coerce_ref(body.model_dump(exclude={"openalex_key"}), 1)
     try:
-        res = resolve_reference(_ref_dict(body), api_key=key)
+        res = _safe_resolve(ref, key)
     except OpenAlexAuthError as exc:
         raise HTTPException(400, redact(str(exc), key))
     return _verify_response(res)
 
 
+def _batch_item(idx: int, raw: Any, key: Optional[str]) -> dict:
+    if not isinstance(raw, dict):
+        res = {"status": "lookup_failed", "work": None, "candidates": [],
+               "notes": ["This entry could not be read as a reference object."]}
+    else:
+        res = _safe_resolve(_coerce_ref(raw, idx), key)  # may raise OpenAlexAuthError
+    return {"index": idx, **_verify_response(res)}
+
+
 @app.post("/api/verify_batch")
 def api_verify_batch(body: VerifyBatchRequest, x_openalex_key: Optional[str] = Header(default=None)):
     """Verify many references in one call (preferred for a whole bibliography —
-    one round trip, and kinder to OpenAlex rate limits)."""
+    one round trip). Malformed entries are reported per-reference, never failing
+    the whole batch; lookups run in parallel to keep a big bibliography fast."""
     if len(body.references) > 200:
         raise HTTPException(400, "Too many references in one request (max 200).")
     key = (x_openalex_key or body.openalex_key or "").strip() or None
-    results = []
-    for i, ref in enumerate(body.references, 1):
-        try:
-            res = resolve_reference(_ref_dict(ref, i), api_key=key)
-        except OpenAlexAuthError as exc:
-            raise HTTPException(400, redact(str(exc), key))
-        results.append({"index": i, **_verify_response(res)})
+    items = list(enumerate(body.references, 1))
+    try:
+        with ThreadPoolExecutor(max_workers=6) as pool:
+            results = list(pool.map(lambda it: _batch_item(it[0], it[1], key), items))
+    except OpenAlexAuthError as exc:
+        raise HTTPException(400, redact(str(exc), key))
     return {"count": len(results), "results": results}
 
 

@@ -214,6 +214,65 @@ def test_verify_batch_cap():
     assert r.status_code == 400
 
 
+def test_verify_accepts_messy_llm_input(monkeypatch):
+    """Real LLM-extracted references are messy: a non-numeric year, a numeric
+    volume/issue/pages, authors as one string, a dict-shaped author, journal
+    under either 'journal' or 'container', and even a non-object entry. None of
+    these may 422 or sink the batch — they must all resolve to a 200 result."""
+    from fastapi.testclient import TestClient
+    from app import main
+
+    captured = {}
+
+    def fake_resolve(ref, api_key=None):
+        captured["ref"] = ref
+        return {"status": "found",
+                "work": {"title": ref.get("title"), "authors": [], "year": None,
+                         "venue": None, "doi": None, "abstract": None, "url": "u"},
+                "candidates": [], "notes": [], "field_check": [], "field_mismatch_count": 0}
+
+    monkeypatch.setattr(main, "resolve_reference", fake_resolve)
+    client = TestClient(main.app)
+
+    # Single verify with the shapes that previously triggered a strict-Pydantic 422.
+    r = client.post("/api/verify", json={
+        "title": "Motivation through the design of work",
+        "authors": "Hackman, J. R. & Oldham, G. R.",
+        "year": "n.d.", "volume": 16, "issue": 2, "pages": 250,
+        "journal": "Organizational Behavior",
+    })
+    assert r.status_code == 200
+    assert r.json()["status"] == "found"
+    # Coercion normalized the messy fields before hitting resolve_reference.
+    ref = captured["ref"]
+    assert ref["authors"] == ["Hackman, J. R.", "Oldham, G. R."]
+    assert ref["year"] is None            # "n.d." has no plausible 4-digit year
+    assert ref["volume"] == "16" and ref["pages"] == "250"
+    assert ref["container"] == "Organizational Behavior"
+
+    # A year buried in prose is still recovered; 'container' is accepted too.
+    r2 = client.post("/api/verify", json={"title": "T", "year": "forthcoming 2023",
+                                          "container": "Journal X",
+                                          "authors": [{"family": "Vaswani"}, "Shazeer"]})
+    assert r2.status_code == 200
+    assert captured["ref"]["year"] == 2023
+    assert captured["ref"]["authors"] == ["Vaswani", "Shazeer"]
+    assert captured["ref"]["container"] == "Journal X"
+
+    # Batch tolerates a non-object entry (reported per-reference, batch survives).
+    rb = client.post("/api/verify_batch", json={"references": [
+        {"title": "Good", "year": "2020"},
+        "just a string, not an object",
+        {"title": "Also good", "volume": 3},
+    ]})
+    assert rb.status_code == 200
+    b = rb.json()
+    assert b["count"] == 3
+    assert b["results"][0]["status"] == "found"
+    assert b["results"][1]["status"] == "lookup_failed"
+    assert b["results"][2]["status"] == "found"
+
+
 def test_parse_json_handles_braces_inside_strings():
     from app.llm import _parse_json
     # A citation context containing math braces must not break brace matching.
