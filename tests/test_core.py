@@ -186,6 +186,21 @@ def test_compare_authors_detects_wrong_author():
     assert "Smith" in r["detail"]
 
 
+def test_compare_authors_flags_wrong_order():
+    """Swapped author order is a real citation error (it reassigns first
+    authorship) — 'Kahneman & Tversky (1974)' must not pass as a clean match
+    for Tversky & Kahneman."""
+    from app.fieldcheck import compare_authors
+    res = compare_authors({"authors": ["Kahneman, D.", "Tversky, A."], "et_al": False},
+                          ["Amos Tversky", "Daniel Kahneman"])
+    assert res["status"] == "mismatch"
+    assert "order" in res["detail"].lower()
+    # Correct order still passes.
+    ok = compare_authors({"authors": ["Tversky, A.", "Kahneman, D."], "et_al": False},
+                         ["Amos Tversky", "Daniel Kahneman"])
+    assert ok["status"] == "match"
+
+
 def test_compare_authors_matches_surnames_across_formats():
     from app.fieldcheck import compare_authors
     ref = {"authors": ["Jumper, J.", "Evans, R."], "et_al": True}

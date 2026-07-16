@@ -85,8 +85,11 @@ def compare_authors(ref: dict, work_authors_full: list[str]) -> dict:
                 "reference_value": ", ".join(ref_names[:6]), "openalex_value": None,
                 "detail": "OpenAlex has no author list for this work."}
 
+    def matches(ref_sn, w):
+        return ref_sn == w or (len(ref_sn) > 3 and (ref_sn in w or w in ref_sn))
+
     def found(ref_sn):
-        return any(ref_sn == w or (len(ref_sn) > 3 and (ref_sn in w or w in ref_sn)) for w in work_surnames)
+        return any(matches(ref_sn, w) for w in work_surnames)
 
     wrong = [ref_names[i] for i, sn in enumerate(ref_surnames) if not found(sn)]
     detail_parts = []
@@ -98,6 +101,17 @@ def compare_authors(ref: dict, work_authors_full: list[str]) -> dict:
         status = "mismatch"
         detail_parts.append(
             f"Reference lists {len(ref_surnames)} author(s); OpenAlex records {len(work_surnames)}.")
+    else:
+        # Same names, but in a different ORDER — a real citation error (author
+        # order assigns credit; "Kahneman & Tversky (1974)" is a wrong citation
+        # of Tversky & Kahneman). Map each printed surname to its position on
+        # the record; any inversion flags a mismatch.
+        positions = [next((j for j, w in enumerate(work_surnames) if matches(sn, w)), None)
+                     for sn in ref_surnames]
+        if all(p is not None for p in positions) and positions != sorted(positions):
+            status = "mismatch"
+            detail_parts.append("The authors are printed in a different order than "
+                                "on the record (author order assigns first authorship).")
     return {
         "field": "authors", "status": status,
         "reference_value": ", ".join(ref_names[:8]) + ("…" if len(ref_names) > 8 else ""),
