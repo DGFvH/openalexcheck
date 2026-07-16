@@ -506,7 +506,7 @@ def _batch_item(idx: int, raw: Any, key: Optional[str]) -> dict:
 # WHICH build answered — a count:0 from a stale deployment is otherwise
 # indistinguishable from a parsing failure on the current one.
 # BUMP THIS on every change to these endpoints' behavior.
-API_VERSION = "2026-07-16.8"
+API_VERSION = "2026-07-16.9"
 
 
 def _from_query(request: Request) -> tuple[list, Optional[str]]:
@@ -581,6 +581,43 @@ async def api_verify_batch(request: Request, x_openalex_key: Optional[str] = Hea
     if not results:
         resp["hint"] = _shape_hint(payload, request)
     return resp
+
+
+@app.get("/api/echo")
+@app.post("/api/echo")
+async def api_echo(request: Request):
+    """Diagnostic mirror for extension-transport debugging: reflects back
+    exactly what arrived on the wire — method, content type/length, query
+    parameters, header keys/values (values of key-like headers redacted), and
+    the raw body (capped). No parsing, no normalization, no interpretation:
+    if a platform's function arguments don't appear in this response, the
+    platform did not transmit them. Point a minimal test function here to
+    settle 'does anything get sent?' beyond argument."""
+    raw = (await request.body()).decode("utf-8", "replace")
+
+    def safe_val(k: str, v: str) -> str:
+        sensitive = ("key", "token", "auth", "secret", "cookie")
+        return "•••redacted•••" if any(s in k.lower() for s in sensitive) else v
+
+    return {
+        "api_version": API_VERSION,
+        "received": {
+            "method": request.method,
+            "url_path": request.url.path,
+            "content_type": request.headers.get("content-type"),
+            "content_length": request.headers.get("content-length"),
+            "query_params": {k: safe_val(k, v) for k, v in request.query_params.items()},
+            "headers": {k: safe_val(k, v) for k, v in request.headers.items()},
+            "body_first_2000_chars": raw[:2000],
+            "body_total_chars": len(raw),
+        },
+        "how_to_read_this": (
+            "This is a byte-level mirror of your request. If the text you asked the "
+            "assistant to send does NOT appear in body_first_2000_chars or query_params, "
+            "the calling platform did not transmit the function arguments at all — the "
+            "failure is in the platform's gateway, not in this API."
+        ),
+    }
 
 
 @app.get("/edugenai")

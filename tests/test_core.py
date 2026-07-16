@@ -473,6 +473,35 @@ def test_verify_tolerates_any_request_shape(monkeypatch):
     assert "references_json" in r.json()["hint"]
 
 
+def test_echo_endpoint_mirrors_transport():
+    """/api/echo is the ground-truth transport test: it reflects method, query,
+    headers, and raw body byte-for-byte (key-like values redacted), so 'does the
+    platform send anything?' can be settled without trusting any parsing."""
+    from fastapi.testclient import TestClient
+    from app import main
+    client = TestClient(main.app)
+
+    r = client.post("/api/echo?probe=XYZ", content=b'{"message":"HELLO-42"}',
+                    headers={"Content-Type": "application/json",
+                             "X-OpenAlex-Key": "supersecret"})
+    d = r.json()
+    rec = d["received"]
+    assert rec["method"] == "POST"
+    assert "HELLO-42" in rec["body_first_2000_chars"]
+    assert rec["query_params"]["probe"] == "XYZ"
+    assert rec["headers"]["x-openalex-key"] == "•••redacted•••"   # never echo keys
+    assert "supersecret" not in r.text
+    assert d["api_version"] == main.API_VERSION
+
+    g = client.get("/api/echo?message=VIA-QUERY").json()["received"]
+    assert g["method"] == "GET" and g["query_params"]["message"] == "VIA-QUERY"
+    assert g["body_total_chars"] == 0
+
+    # Body echo is capped so the endpoint can't be used as an amplifier.
+    big = client.post("/api/echo", content=b"A" * 10000).json()["received"]
+    assert len(big["body_first_2000_chars"]) == 2000 and big["body_total_chars"] == 10000
+
+
 def test_parse_json_handles_braces_inside_strings():
     from app.llm import _parse_json
     # A citation context containing math braces must not break brace matching.

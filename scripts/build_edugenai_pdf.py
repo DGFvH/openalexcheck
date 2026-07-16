@@ -377,6 +377,16 @@ def build():
                            "\"Attention is all you need\",\"year\":2017}]}' — a healthy "
                            "deployment answers within seconds with count: 1 and a Verified "
                            "result.", BODY))
+    story.append(Paragraph("The definitive transport test: add a second, minimal function "
+                           "named echo_test pointing at POST <host>/api/echo with one required "
+                           "string parameter \"message\", then say in a chat: 'Run the echo "
+                           "test with the message PHANTOCITE-TRANSPORT-TEST-42 and show me the "
+                           "raw response.' The /api/echo endpoint is a byte-level mirror (no "
+                           "parsing at all): if the test string appears in its response, the "
+                           "platform CAN transmit arguments and the problem is the verify "
+                           "function's configuration; if the mirrored body and query are "
+                           "empty, the platform provably sends nothing — take that output to "
+                           "the platform's support. Repeat once with Method GET.", BODY))
 
     story.append(PageBreak())
     story.append(Paragraph("What the endpoint returns", H2))

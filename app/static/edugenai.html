@@ -316,6 +316,33 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
   -H "Content-Type: application/json" \
   -d '{"references":[{"title":"Attention is all you need","year":2017}]}'</pre><button class="copy" data-for="c-curl">Copy</button></div>
 
+  <h3>The definitive transport test — does the platform send anything at all?</h3>
+  <p>When every schema variant still yields <code class="inline">count: 0</code>, settle it with the <strong>echo endpoint</strong>: a byte-level mirror at <code class="inline">/api/echo</code> that reflects back exactly what arrives — method, headers, query string, and raw body — with no parsing in between. It cannot be wrong: if your text isn't in its response, it never reached the server.</p>
+  <p><strong>1.</strong> In the extension builder, add a second, minimal test function (Method <code class="inline">POST</code>, and repeat later with <code class="inline">GET</code>):</p>
+  <div class="codewrap"><pre id="c-echo-url">POST  https://www.phantocite.com/api/echo</pre><button class="copy" data-for="c-echo-url">Copy</button></div>
+  <div class="codewrap"><pre id="c-echo-schema">{
+  "name": "echo_test",
+  "description": "Diagnostic echo. Whenever the user asks to run the echo test, call this with the exact text they give you.",
+  "parameters": {
+    "type": "object",
+    "properties": {
+      "message": { "type": "string", "description": "The exact text the user asked to send." }
+    },
+    "required": ["message"]
+  }
+}</pre><button class="copy" data-for="c-echo-schema">Copy</button></div>
+  <p><strong>2.</strong> In a chat, say: <em>“Run the echo test with the message PHANTOCITE-TRANSPORT-TEST-42 and show me the raw response.”</em></p>
+  <p><strong>3.</strong> Read the response — three possible outcomes, no ambiguity:</p>
+  <ul>
+    <li><code class="inline">PHANTOCITE-TRANSPORT-TEST-42</code> appears in <code class="inline">body_first_2000_chars</code> or <code class="inline">query_params</code> → <strong>the platform CAN transmit arguments.</strong> The problem is specific to the verify function's schema — compare how the two functions are configured.</li>
+    <li>The response shows an empty body and no query params → <strong>proof the platform sends nothing</strong>, even for a single flat string. Nothing on the API side can fix that; take the echo output to EduGenAI support.</li>
+    <li>No response / an error → the platform never even made the HTTP call.</li>
+  </ul>
+  <p>For comparison, this is what a working transport looks like from a terminal:</p>
+  <div class="codewrap"><pre id="c-echo-curl">curl -s -X POST https://www.phantocite.com/api/echo \
+  -H "Content-Type: application/json" \
+  -d '{"message":"PHANTOCITE-TRANSPORT-TEST-42"}'</pre><button class="copy" data-for="c-echo-curl">Copy</button></div>
+
   <h2>What data passes through your server?</h2>
   <p>Because the extension calls <em>your</em> deployment, it helps to be precise about what actually travels there — and what does not.</p>
   <div class="card flow">
@@ -347,7 +374,7 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
     var origin = window.location.origin;
     if (!/^https?:\/\//.test(origin)) return;
     document.querySelectorAll("#host-token").forEach(function (el) { el.textContent = origin; });
-    ["c-url", "c-curl"].forEach(function (id) {
+    ["c-url", "c-curl", "c-echo-url", "c-echo-curl"].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.textContent = el.textContent
         .replace("https://YOUR-DEPLOYMENT-HOST", origin)
