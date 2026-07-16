@@ -1,5 +1,7 @@
 # openalexcheck — citation hallucination & misquote checker
 
+**Live:** [phantocite.com](https://www.phantocite.com) · **Stack:** FastAPI · streaming NDJSON · provider-agnostic LLM layer (Claude / GPT / Gemini) · OpenAlex API · vanilla-JS SPA (no build step)
+
 A small web tool for checking the references in a student paper.
 
 You upload a **PDF or DOCX** and paste **your own LLM API key** (Claude,
@@ -134,3 +136,11 @@ python scripts/build_edugenai_pdf.py
 pip install pytest
 pytest
 ```
+
+## License
+
+© Daniël van Hemert. All rights reserved (license to follow).
+
+Data sources retain their own terms: bibliographic metadata and abstracts come
+from [OpenAlex](https://openalex.org) (CC0), and analysis runs on whichever LLM
+provider's key you supply.
