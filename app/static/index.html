@@ -26,7 +26,7 @@
   /* One font family throughout (system sans) for consistency and readability;
      the brand title is the only serif accent. */
   body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.5; }
-  header { padding: 2.2rem 1.5rem 1rem; max-width: 820px; margin: 0 auto; }
+  header { padding: 2.2rem 1.5rem 1rem; max-width: 1200px; margin: 0 auto; }
   h1 { font-size: 1.7rem; margin: 0 0 .3rem; font-family: Georgia, "Times New Roman", serif; }
   h1 em { color: var(--accent); font-style: italic; }
   .sub { color: var(--muted); margin: 0; font-size: .95rem; }
@@ -43,7 +43,7 @@
   button.sample { margin-top: 1.3rem; margin-left: .6rem; background: #e8e4da; color: #4a463d; border: 1px solid var(--border); border-radius: 6px; padding: .65rem 1.2rem; font: inherit; font-family: system-ui, sans-serif; font-size: .95rem; cursor: pointer; }
   button.sample:hover { background: #ddd7c9; }
   .sample-banner { font-family: system-ui, sans-serif; font-size: .85rem; background: #eef0ee; border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 6px; padding: .6rem .9rem; margin-top: 1rem; color: var(--ink); }
-  main { max-width: 820px; margin: 0 auto; padding: 0 1.5rem 4rem; }
+  main { max-width: 1200px; margin: 0 auto; padding: 0 1.5rem 4rem; }
   .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.3rem 1.5rem; margin-top: 1.2rem; }
   label { display: block; font-size: .85rem; color: var(--muted); margin: .9rem 0 .25rem; font-family: system-ui, sans-serif; }
   input[type=file], input[type=password], input[type=text], select {
@@ -185,7 +185,8 @@
     </div>
   </div>
   <p class="sub">Upload a (student) paper (PDF or DOCX). Every reference is looked up in OpenAlex;
-  citation contexts are compared against the real abstracts using your own LLM API key. Using EduGenAI? Follow <a href="/edugenai">these instructions</a> to add this as an extension. Using a different tool? Contact me using one of the links above and I'll add instructions for it.</p>
+  citation contexts are compared against the real abstracts using your own LLM API key.</p>
+  <p class="sub" style="margin-top:.4rem">Using EduGenAI? Follow <a href="/edugenai">these instructions</a> to add this as an extension. Using a different tool? Contact me using one of the links above and I'll add instructions for it.</p>
   <p class="sub" style="margin-top:.4rem">When using the standalone tool, <strong>always</strong> confirm with your institution whether privacy policy allows this use. Tool may contain false positives &amp; negatives, and checks against abstracts only. Always confirm manually.</p>
 </header>
 <main>
