@@ -134,6 +134,9 @@
   .scheck.muted { background: var(--bg); color: var(--muted); border-color: var(--border); }
   .ref-body { padding: 0 1.1rem 1rem; }
   .ref.static { padding: .9rem 1.1rem; }  /* non-collapsing cards (fuzzy screen) */
+  .orphan-card { border-left: 3px solid var(--bad); }
+  .orphan-item { font-family: system-ui, sans-serif; font-size: .88rem; margin-top: .5rem; }
+  .orphan-item .meta-inline { color: var(--muted); font-size: .84rem; }
   /* Each check (Source / Usage) is its own collapsible part inside a card. */
   .part { border: 1px solid var(--border); border-radius: 6px; margin-top: .7rem; background: #fff; }
   .part > summary.part-sum { list-style: none; cursor: pointer; padding: .5rem .7rem; display: flex; align-items: center; flex-wrap: wrap; gap: .35rem .5rem; }
@@ -305,6 +308,7 @@
         <button data-fmt="html">⬇ HTML</button>
       </div>
     </div>
+    <div id="orphans"></div>
     <div id="screen-results"></div>
     <div id="screen-fuzzy" class="hidden"></div>
   </div>
@@ -499,7 +503,9 @@ const SAMPLE = [
 
 function showSample() {
   stopAnalysis();
-  DATA = { checks: { hallucination: true, misquote: true }, results: JSON.parse(JSON.stringify(SAMPLE)) };
+  DATA = { checks: { hallucination: true, misquote: true }, results: JSON.parse(JSON.stringify(SAMPLE)),
+           orphans: [{ label: "Doe & Lee (2021)", year: 2021,
+                       context: "Choice architecture further amplifies these effects (Doe & Lee, 2021)." }] };
   FINALIZED = false;
   for (const k in CARDS) delete CARDS[k];
   $("error").classList.add("hidden");
@@ -534,7 +540,7 @@ async function runAnalysis() {
   fd.append("check_misquote", wantMis);
 
   // Reset state
-  DATA = { checks: { hallucination: wantHall, misquote: wantMis }, results: [] };
+  DATA = { checks: { hallucination: wantHall, misquote: wantMis }, results: [], orphans: [] };
   FINALIZED = false;
   for (const k in CARDS) delete CARDS[k];
   $("run").disabled = true;
@@ -618,6 +624,13 @@ function handleEvent(ev) {
       else logLine(ev.message);
       break;
     }
+    case "orphans": {
+      DATA.orphans = ev.items || [];
+      ensureResultsVisible();
+      renderOrphans();
+      updateSummary();
+      break;
+    }
     case "result": {
       DATA.results.push(ev.result);
       ensureResultsVisible();
@@ -678,8 +691,22 @@ function misquoteFlagged(r) {
   return v === "mismatch" || v === "likely_mismatch";
 }
 
+// In-text citations with no bibliography entry — the reader can never look
+// these up, so they get their own warning card above the reference cards.
+function renderOrphans() {
+  const items = DATA.orphans || [];
+  $("orphans").innerHTML = !items.length ? "" : `
+    <div class="ref static orphan-card">
+      <div class="ref-head"><span class="badge not_found">Missing reference</span>
+        <span class="refno">${items.length} in-text citation${items.length > 1 ? "s" : ""}</span></div>
+      <div class="meta" style="margin-top:.4rem">These sources are cited in the body but have <strong>no entry in the reference list</strong>, so they cannot be verified — the reference is missing (or the citation is misspelled).</div>
+      ${items.map(o => `<div class="orphan-item"><strong>${esc(o.label)}</strong>${o.context ? ` — <span class="meta-inline">“${esc(o.context)}”</span>` : ""}</div>`).join("")}
+    </div>`;
+}
+
 function updateSummary() {
   const results = DATA.results;
+  const orphanCount = (DATA.orphans || []).length;
   let clean = 0, flagged = 0, meta = 0, misq = 0, fuzzy = 0, notFound = 0, lookupFail = 0;
   results.forEach(r => {
     if (r.status === "fuzzy") fuzzy++;
@@ -702,6 +729,7 @@ function updateSummary() {
     `<span style="color:var(--warn)" title="Exist in OpenAlex but need a human look${esc(reviewTip)}">● ${flagged} need review${reviewTip}</span>` +
     (fuzzy ? `<span style="color:var(--warn)">● ${fuzzy} fuzzy</span>` : "") +
     `<span style="color:var(--bad)">● ${notFound} potential hallucinations</span>` +
+    (orphanCount ? `<span style="color:var(--bad)">● ${orphanCount} cited but missing from the reference list</span>` : "") +
     (lookupFail ? `<span style="color:var(--info)">● ${lookupFail} lookup failed</span>` : "");
   $("fuzzy-count").textContent = fuzzy ? `(${fuzzy})` : "";
 }
@@ -721,8 +749,9 @@ function finalize() {
   $("screen-fuzzy").innerHTML = fuzzies.map(renderFuzzy).join("") ||
     "<p class='meta' style='margin-top:1rem'>No fuzzy matches — every reference either resolved cleanly or was not found at all.</p>";
   attachFuzzyHandlers();
+  renderOrphans();
   updateSummary();
-  $("downloads").style.display = DATA.results.length ? "flex" : "none";
+  $("downloads").style.display = (DATA.results.length || (DATA.orphans || []).length) ? "flex" : "none";
 }
 
 function showError(msg) {
@@ -987,9 +1016,16 @@ function attachFuzzyHandlers() {
 // One row per reference with the verification outcome. Built entirely in the
 // browser from data already on the page — the efficient choice for a table.
 function tableRows() {
+  const orphanRows = (DATA.orphans || []).map(o => ({
+    "#": "", "Status": "Cited, missing from reference list", "Priority": "Review",
+    "Reference (as printed)": o.label, "Matched title": "", "Field mismatches": "",
+    "Authors (OpenAlex)": "", "Year ref / OA": `${o.year ?? ""} / `, "DOI ref / OA": "",
+    "Journal ref / OA": "", "Pages ref / OA": "", "Misquote verdict": "",
+    "Paper topic": "", "Student usage": "", "Notes": o.context || "", "OpenAlex URL": "",
+  }));
   const ordered = DATA.results.slice().sort((a, b) =>
     severity(b) - severity(a) || a.reference.id - b.reference.id);
-  return ordered.map(r => {
+  return orphanRows.concat(ordered.map(r => {
     const w = r.work || {};
     const fields = r.field_check || [];
     const fget = name => fields.find(f => f.field === name) || {};
@@ -1013,7 +1049,7 @@ function tableRows() {
       "Notes": (r.notes || []).join(" | "),
       "OpenAlex URL": w.url || "",
     };
-  });
+  }));
 }
 
 function downloadResults(fmt) {

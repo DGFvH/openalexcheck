@@ -223,6 +223,15 @@ def resolve_reference(ref: dict, api_key: Optional[str] = None) -> dict:
     notes: list[str] = []
     candidates: list[dict] = []
 
+    # Author + year alone cannot identify a work — without a title or DOI there
+    # is nothing to search on, and "we couldn't look" must never be reported as
+    # "this is fabricated".
+    if not (ref.get("title") or clean_doi(ref.get("doi") or "")):
+        return {"status": "lookup_failed", "work": None, "candidates": [],
+                "notes": ["This reference has no title or DOI — author and year alone "
+                          "are not enough to identify a work in OpenAlex, so it was "
+                          "not checked. Provide the full reference entry to verify it."]}
+
     lookup_failed = False
     with _client(api_key) as client:
         doi = clean_doi(ref.get("doi") or "")

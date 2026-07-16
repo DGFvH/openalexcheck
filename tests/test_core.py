@@ -35,6 +35,42 @@ def test_normalize_and_similarity():
     assert title_similarity("completely different thing", a) < 0.5
 
 
+def test_resolve_without_title_or_doi_is_unverifiable_not_hallucinated():
+    """Author + year alone cannot identify a work. EduGenAI sends such entries
+    when a paper has in-text citations but no bibliography — they must come back
+    lookup_failed ('not checked'), never not_found ('potential hallucination')."""
+    from app.openalex import resolve_reference
+    res = resolve_reference({"id": 1, "title": None, "doi": None,
+                             "authors": ["Dosumu"], "first_author_surname": "Dosumu",
+                             "year": 2023, "container": None, "volume": None,
+                             "issue": None, "pages": None, "et_al": True, "contexts": []})
+    assert res["status"] == "lookup_failed"
+    assert "no title or DOI" in res["notes"][0]
+
+
+def test_extract_references_returns_orphan_citations(monkeypatch):
+    """Extraction returns (references, orphans); orphans are in-text citations
+    with no bibliography entry, tolerated in messy shapes."""
+    from app import analysis
+
+    class FakeLLM:
+        def complete_json(self, system, user, max_tokens=0, thinking=True):
+            return {"references": [
+                        {"id": 1, "raw": "Smith, J. (2020). A real title. Journal.",
+                         "title": "A real title", "first_author_surname": "Smith",
+                         "authors": ["Smith, J."], "year": 2020, "contexts": []}],
+                    "orphan_citations": [
+                        {"label": "Jones et al. (2019)", "year": 2019,
+                         "context": "As Jones et al. (2019) argue…"},
+                        {"label": "", "year": None, "context": "no label -> dropped"},
+                        "not a dict -> dropped"]}
+
+    refs, orphans = analysis.extract_references(FakeLLM(), "text")
+    assert len(refs) == 1 and refs[0]["title"] == "A real title"
+    assert orphans == [{"label": "Jones et al. (2019)", "year": 2019,
+                        "context": "As Jones et al. (2019) argue…"}]
+
+
 def test_search_query_keeps_apostrophes():
     """OpenAlex title.search indexes "don't" as one token — stripping the
     apostrophe ("don t"/"dont") matches nothing, so a real work would be

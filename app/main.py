@@ -140,13 +140,19 @@ async def _run_stream(*, llm, text, openalex_key, check_hallucination,
         try:
             emit({"type": "progress", "stage": "extract",
                   "message": "Reading the document and extracting references + citation contexts…"})
-            refs = extract_references(llm, text, max_tokens=max_tokens)
-            if not refs:
+            refs, orphans = extract_references(llm, text, max_tokens=max_tokens)
+            if not refs and not orphans:
                 emit({"type": "error", "detail": "No references were found in the document."})
                 return
             emit({"type": "progress", "stage": "extract_done",
                   "reference_count": len(refs),
                   "message": f"Found {len(refs)} references. Verifying against OpenAlex…"})
+            if orphans:
+                # In-text citations with no bibliography entry — the reader can
+                # never look these up, so they are flagged in their own right.
+                emit({"type": "orphans", "items": [
+                    {"label": safe(o["label"]), "year": o["year"],
+                     "context": safe(o["context"])} for o in orphans]})
 
             found_items = []
             total = len(refs)

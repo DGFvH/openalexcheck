@@ -54,13 +54,16 @@ DETAIL = """Use this extension to fact-check the reference list of an uploaded p
 (Emoji are written as words below; copy the exact version with emoji from the
 /edugenai page.)
 
-WHEN TO RUN. Whenever the user uploads or pastes a paper and asks you to check,
-verify, or fact-check its citations or references - for example "check my
-citations", "verify the references", or simply "check" / "verify" once a paper
-is present - run all four steps below end to end by calling verify_references on
-that paper. Do NOT reply with a generic greeting or ask what they want to work
-on: a paper plus a check/verify request IS the instruction. If no paper has been
-provided yet, ask them to upload or paste one, then proceed.
+TRIGGER - WHEN TO RUN. Run all four steps below end to end, WITHOUT asking any
+clarifying question first, whenever the user gives ANY go-ahead while a document
+is present in the conversation. Triggers include (not exhaustive): "start",
+"go", "run", "check", "verify", "start the extension", "run the extension",
+"start the references extension", "start the reference verification", "check my
+citations", "verify my references", any message containing "start" or "run"
+together with "extension" or "references", or a paper uploaded with no other
+instruction. Never respond to a trigger with a greeting, a menu of options, or a
+request to paste the bibliography - the document already in the conversation IS
+the input. Only if NO document has been provided at all, ask for one, then run.
 
 STEP 1 - EXTRACT. Read the document. For every entry in the reference list, pull
 out: title, the full list of author names in order, whether it ends in "et al.",
@@ -68,9 +71,18 @@ year, DOI (only if printed), journal/venue, volume, issue, and page range. Also
 find the sentence(s) in the body where each source is cited, with one sentence of
 context on each side. Keep those citation sentences in your own working notes for
 Step 3 - do NOT send them to the function.
+Also list every IN-TEXT citation (e.g. "(Smith, 2020)", "Jones et al. (2019)")
+that has NO matching entry in the reference list - these ORPHAN CITATIONS cannot
+be looked up by any reader. Keep them in your notes for Step 4; do not send them
+to the function. If the paper has NO reference list at all, every in-text
+citation is an orphan: do not fabricate entries and do not send author+year-only
+items - skip the function call and go straight to Step 4, reporting every
+citation as missing its reference.
 
 STEP 2 - VERIFY. Call the "verify_references" function once, passing every
-reference. For each it returns: "badge" and "severity" (0-100), "status" (found /
+reference that has at least a title or a DOI (an entry with neither cannot be
+identified and comes back as lookup_failed - report it as unverifiable, never as
+a hallucination). For each it returns: "badge" and "severity" (0-100), "status" (found /
 fuzzy / not_found / lookup_failed), "mismatched_fields" and "minor_fields", a
 "field_check" comparing each printed detail to OpenAlex (reference_value vs
 openalex_value; each field's status is "match", "close" = a minor naming
@@ -117,11 +129,17 @@ After the table, add a "Details" section for the red and amber rows only.
   its "url", with authors and year) and ask the user to confirm which, if any, is
   the intended source. Do NOT present a fuzzy row as verified.
 
+Then, if Step 1 found orphan citations, add a "Missing references" section: one
+line per orphan - the citation as printed, the sentence where it appears, and
+the note that it has no entry in the reference list so it cannot be verified.
+This is a real problem for the reader and must never be silently omitted.
+
 End with one summary line that does NOT hide problems inside "verified":
 "N references - X verified & consistent, Y need review, Z fuzzy, W potential
-hallucinations." A reference that EXISTS but has a metadata mismatch or a
-misquote counts under "need review", never under "verified" (optionally break
-Y down, e.g. "2 with wrong details, 1 cited out of context").
+hallucinations, V in-text citations missing from the reference list." (Drop the
+last part when there are no orphans.) A reference that EXISTS but has a metadata
+mismatch or a misquote counts under "need review", never under "verified"
+(optionally break Y down, e.g. "2 with wrong details, 1 cited out of context").
 
 Never invent a DOI, author, year, or verdict the function did not return. If
 "status" is "lookup_failed", say the reference could not be checked - do NOT call
@@ -277,12 +295,15 @@ def build():
     story.append(code(SCHEMA))
 
     story.append(Paragraph("Step 5 — Submit and test", H2))
-    story.append(Paragraph("Click Submit. In a chat, upload a paper (or paste its reference "
-                           "list) and ask it to check the citations — e.g. “check the citations "
-                           "in this paper” or “verify the references”. The assistant will call "
-                           "your endpoint and return the verified table. (A bare “start” reads "
-                           "as a generic greeting; a request that names citations or references "
-                           "is what reliably triggers the tool.)", BODY))
+    story.append(Paragraph("Click Submit. In a chat, upload a paper and type “start” (or "
+                           "“start the extension”, “check my citations”, …) — the Detail "
+                           "description tells the assistant to treat any such go-ahead as the "
+                           "run signal and call your endpoint without asking questions first.",
+                           BODY))
+    story.append(Paragraph("Installed this extension before? The saved copy does not update "
+                           "itself: if “start the extension” gets you a menu instead of a run, "
+                           "re-paste the current Detail description from Step 2 into your "
+                           "extension and submit again.", BODY))
 
     story.append(PageBreak())
     story.append(Paragraph("What the endpoint returns", H2))

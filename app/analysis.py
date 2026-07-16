@@ -17,12 +17,15 @@ You extract bibliographic references and in-text citation contexts from a studen
 Respond with a single JSON object only — no prose, no markdown fences."""
 
 EXTRACT_PROMPT = """\
-Below is the full text of a student paper. Do two things:
+Below is the full text of a student paper. Do three things:
 
 1. Find every entry in the reference list / bibliography.
 2. For each reference, find the place(s) in the BODY of the paper where that
    source is cited, and copy the citing sentence together with one or two
    sentences before and after it (verbatim from the text).
+3. Find every IN-TEXT citation (e.g. "(Smith, 2020)", "Jones et al. (2019)")
+   that has NO matching entry in the reference list — these are orphan
+   citations the reader can never look up.
 
 Return JSON with exactly this shape:
 {
@@ -42,6 +45,13 @@ Return JSON with exactly this shape:
       "et_al": false,
       "contexts": ["citing passage 1", "citing passage 2"]
     }
+  ],
+  "orphan_citations": [
+    {
+      "label": "the citation as printed, e.g. 'Jones et al. (2019)'",
+      "year": 2019,
+      "context": "the sentence in which it is cited, verbatim"
+    }
   ]
 }
 
@@ -54,6 +64,10 @@ Rules:
 - If a reference is never cited in the body, use an empty list for "contexts".
 - "year" must be an integer or null. "doi", "pages", "volume", "issue" must only be
   included if literally present in the document — never invent them.
+- "orphan_citations": one entry per DISTINCT missing source (not per mention). A
+  citation belongs here only if no bibliography entry plausibly matches its
+  author(s) and year. If the paper has NO reference list at all, EVERY in-text
+  citation is an orphan. If there are none, return an empty list.
 
 PAPER TEXT:
 <<<
@@ -106,7 +120,9 @@ ITEMS:
 {ITEMS}"""
 
 
-def extract_references(llm: LLMClient, text: str, max_tokens: int = 16000) -> list[dict]:
+def extract_references(llm: LLMClient, text: str, max_tokens: int = 16000) -> tuple[list[dict], list[dict]]:
+    """Returns (references, orphan_citations) — orphans are in-text citations
+    with no matching bibliography entry."""
     # Extraction is mechanical (pattern-matching over the text); disabling model
     # thinking gives the whole token budget to the JSON output, which avoids
     # truncation-induced JSON errors on long documents.
@@ -115,6 +131,12 @@ def extract_references(llm: LLMClient, text: str, max_tokens: int = 16000) -> li
     refs = data.get("references")
     if not isinstance(refs, list):
         raise LLMError("The model did not return a 'references' list.")
+    orphans = []
+    for o in (data.get("orphan_citations") or []):
+        if isinstance(o, dict) and _clean_str(o.get("label")):
+            orphans.append({"label": _clean_str(o.get("label")),
+                            "year": _to_int(o.get("year")),
+                            "context": _clean_str(o.get("context")) or ""})
     cleaned = []
     for i, ref in enumerate(refs):
         if not isinstance(ref, dict):
@@ -135,7 +157,7 @@ def extract_references(llm: LLMClient, text: str, max_tokens: int = 16000) -> li
             "et_al": bool(ref.get("et_al")),
             "contexts": contexts[:MAX_CONTEXTS_PER_REF],
         })
-    return cleaned
+    return cleaned, orphans
 
 
 def verify_references(refs: list[dict], openalex_key: Optional[str] = None) -> list[dict]:
