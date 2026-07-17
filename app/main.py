@@ -505,8 +505,9 @@ def _batch_item(idx: int, raw: Any, key: Optional[str]) -> dict:
 # Included in every verify response so a pasted extension transcript shows
 # WHICH build answered — a count:0 from a stale deployment is otherwise
 # indistinguishable from a parsing failure on the current one.
-# BUMP THIS on every change to these endpoints' behavior.
-API_VERSION = "2026-07-16.9"
+# Deployment marker, returned by the verify endpoints (and /api/echo). BUMP on
+# every deploy so "is production current?" stays answerable from a response.
+API_VERSION = "2026-07-16.10"
 
 
 def _from_query(request: Request) -> tuple[list, Optional[str]]:

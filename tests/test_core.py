@@ -522,6 +522,49 @@ def test_complete_json_truncation_message(monkeypatch):
         assert "cut off" in str(e).lower() and "token" in str(e).lower()
 
 
+def test_anthropic_streams_to_avoid_10min_limit(monkeypatch):
+    """The Anthropic call must STREAM (client.messages.stream), not use the
+    blocking .create — the SDK rejects a non-streaming request whose max_tokens
+    could take >10 min ('Streaming is required...'), which a large token limit
+    trips. Verify the streamed final message is accumulated."""
+    import sys, types
+
+    class FakeBlock:
+        type = "text"
+        text = '{"references": []}'
+
+    class FakeMessage:
+        stop_reason = "end_turn"
+        content = [FakeBlock()]
+
+    class FakeStreamCtx:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def get_final_message(self): return FakeMessage()
+
+    used = {"stream": False, "create": False}
+
+    class FakeMessages:
+        def stream(self, **kw): used["stream"] = True; return FakeStreamCtx()
+        def create(self, **kw): used["create"] = True; raise AssertionError("must not call create")
+
+    class FakeAnthropic:
+        def __init__(self, api_key=None): self.messages = FakeMessages()
+
+    fake = types.ModuleType("anthropic")
+    fake.Anthropic = FakeAnthropic
+    fake.AuthenticationError = type("AuthenticationError", (Exception,), {})
+    fake.APIStatusError = type("APIStatusError", (Exception,), {})
+    fake.APIConnectionError = type("APIConnectionError", (Exception,), {})
+    monkeypatch.setitem(sys.modules, "anthropic", fake)
+
+    from app.llm import LLMClient
+    c = LLMClient("anthropic", "sk-test")
+    out = c.complete_json("s", "u", max_tokens=64000)   # a value that would trip the guard
+    assert out == {"references": []}
+    assert used["stream"] and not used["create"]
+
+
 def test_complete_json_generic_error_when_not_truncated(monkeypatch):
     from app.llm import LLMClient, LLMError
     c = LLMClient("anthropic", "sk-test")

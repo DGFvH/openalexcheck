@@ -70,13 +70,19 @@ class LLMClient:
 
         client = anthropic.Anthropic(api_key=self._api_key)
         try:
-            response = client.messages.create(
+            # Always stream: the SDK refuses a NON-streaming request whose
+            # max_tokens could take longer than 10 minutes to generate ("Streaming
+            # is required for operations that may take longer than 10 minutes").
+            # A large 'Max output tokens per LLM call' trips that ceiling, so we
+            # stream and accumulate the final message instead.
+            with client.messages.stream(
                 model=self.model,
                 max_tokens=max_tokens,
                 system=system,
                 thinking={"type": "adaptive"} if thinking else {"type": "disabled"},
                 messages=[{"role": "user", "content": user}],
-            )
+            ) as stream:
+                response = stream.get_final_message()
         except anthropic.AuthenticationError as exc:
             raise LLMError("Anthropic rejected the API key.") from exc
         except anthropic.APIStatusError as exc:
