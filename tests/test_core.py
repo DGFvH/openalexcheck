@@ -1,3 +1,5 @@
+import json
+
 import pytest
 
 from app.llm import LLMError, _parse_json
@@ -1027,3 +1029,144 @@ def test_echo_redacts_keys_in_body_query_and_infra_header_values():
     r = client.post("/api/echo", content=b"openalex_key=formsecret&references=%5B%5D",
                     headers={"Content-Type": "application/x-www-form-urlencoded"})
     assert "formsecret" not in r.text and "references=" in r.json()["received"]["body_first_2000_chars"]
+
+
+# ---------------------------------------------------------------------------
+# Commit 8: the analysis stream — extraction off-loop, isolation, order, budget, cancel
+# ---------------------------------------------------------------------------
+
+def _stream_events(client, monkeypatch, refs, resolve=None, compare=None, budget=None,
+                   filename="paper.pdf"):
+    import time as _t
+    from app import main
+    if budget is not None:
+        monkeypatch.setattr(main, "ANALYSIS_BUDGET_S", budget)
+    monkeypatch.setattr(main, "extract_text", lambda name, data: "body text " * 50)
+    monkeypatch.setattr(main, "extract_references", lambda llm, text, max_tokens=0: (refs, []))
+    if resolve is None:
+        def resolve(ref, api_key=None, **kw):
+            return {"status": "found", "work": {"title": ref["title"], "abstract": "abs"},
+                    "candidates": [], "notes": [], "field_check": [], "field_mismatch_count": 0}
+    monkeypatch.setattr(main, "resolve_reference", resolve)
+    if compare is None:
+        def compare(llm, items, max_tokens=0, **kw):
+            for it in items:
+                yield {"id": it["id"], "verdict": "match", "explanation": "ok"}
+    monkeypatch.setattr(main, "compare_contexts", compare)
+    data = {"provider": "openai", "api_key": "sk-test", "check_hallucination": "true",
+            "check_misquote": "true"}
+    with client.stream("POST", "/api/analyze", files={"file": (filename, b"%PDF-1.4 x")}, data=data) as r:
+        assert r.status_code == 200
+        return [json.loads(l) for l in r.iter_lines() if l.strip()]
+
+
+def _refs(n):
+    return [{"id": i, "raw": f"R{i}", "title": f"Title {i}", "authors": [], "year": 2020,
+             "doi": None, "container": None, "volume": None, "issue": None, "pages": None,
+             "et_al": False, "contexts": ["ctx"], "first_author_surname": None}
+            for i in range(1, n + 1)]
+
+
+def test_analyze_extraction_error_is_a_stream_event_not_http_400():
+    from fastapi.testclient import TestClient
+    from app import main
+    client = TestClient(main.app)
+    data = {"provider": "openai", "api_key": "sk-test", "check_hallucination": "true"}
+    with client.stream("POST", "/api/analyze", files={"file": ("paper.txt", b"hello")}, data=data) as r:
+        assert r.status_code == 200
+        events = [json.loads(l) for l in r.iter_lines() if l.strip()]
+    kinds = [e["type"] for e in events]
+    assert kinds[0] == "ready" and "error" in kinds
+    assert "Unsupported file type" in next(e for e in events if e["type"] == "error")["detail"]
+    # Provider/key validation is still a plain HTTP 400.
+    r = client.post("/api/analyze", files={"file": ("p.pdf", b"x")},
+                    data={"provider": "nope", "api_key": "k", "check_hallucination": "true"})
+    assert r.status_code == 400
+
+
+def test_analyze_results_stay_ordered_with_parallel_lookups(monkeypatch):
+    import time as _t
+    from fastapi.testclient import TestClient
+    from app import main
+    n = 6
+
+    def slow_reverse(ref, api_key=None, **kw):
+        _t.sleep(0.02 * (n - ref["id"]))   # later references finish FIRST
+        return {"status": "found", "work": {"title": ref["title"], "abstract": "abs"},
+                "candidates": [], "notes": [], "field_check": [], "field_mismatch_count": 0}
+
+    events = _stream_events(TestClient(main.app), monkeypatch, _refs(n), resolve=slow_reverse)
+    ids = [e["result"]["reference"]["id"] for e in events if e["type"] == "result"]
+    assert ids == list(range(1, n + 1))
+    assert [e["done"] for e in events if e["type"] == "progress" and e["stage"] == "verify"] == list(range(1, n + 1))
+    done = events[-1]
+    assert done["type"] == "done" and done["incomplete"] is False and done["unprocessed"] == 0
+    assert [e["type"] for e in events][:2] == ["ready", "progress"] and events[1]["stage"] == "read"
+
+
+def test_analyze_one_bad_reference_does_not_kill_the_run(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import main
+
+    def flaky(ref, api_key=None, **kw):
+        if ref["id"] == 2:
+            raise ValueError("Expecting value: line 1 column 1")
+        return {"status": "found", "work": {"title": ref["title"], "abstract": "abs"},
+                "candidates": [], "notes": [], "field_check": [], "field_mismatch_count": 0}
+
+    events = _stream_events(TestClient(main.app), monkeypatch, _refs(3), resolve=flaky)
+    results = {e["result"]["reference"]["id"]: e["result"] for e in events if e["type"] == "result"}
+    assert set(results) == {1, 2, 3} and results[2]["status"] == "lookup_failed"
+    assert "Expecting value" not in json.dumps(results[2]["notes"])
+    assert events[-1]["type"] == "done"
+
+
+def test_analyze_time_budget_stops_before_lookups(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import main
+    events = _stream_events(TestClient(main.app), monkeypatch, _refs(4), budget=0)
+    assert not [e for e in events if e["type"] == "result"]
+    done = events[-1]
+    assert done["type"] == "done" and done["incomplete"] is True
+    assert done["unprocessed"] == 4 and done["reason"] == "time_budget"
+
+
+def test_pipeline_cancel_stops_the_run(monkeypatch):
+    import threading, time as _t
+    from app import main
+    from app.llm import LLMClient
+    emitted = []
+    control = main.RunControl(cancel=threading.Event(), deadline=_t.monotonic() + 100)
+    control.cancel.set()
+    monkeypatch.setattr(main, "extract_text", lambda name, data: "text")
+    monkeypatch.setattr(main, "extract_references", lambda llm, text, max_tokens=0: (_refs(3), []))
+    monkeypatch.setattr(main, "resolve_reference", lambda ref, api_key=None, **kw: (_ for _ in ()).throw(AssertionError("must not look up")))
+    main._pipeline(emit=emitted.append, control=control, llm=LLMClient("openai", "sk-test"),
+                   filename="p.pdf", data=b"x", openalex_key=None, check_hallucination=True,
+                   check_misquote=True, max_tokens=1000, safe=str)
+    done = [e for e in emitted if e and e["type"] == "done"][0]
+    assert done["incomplete"] and done["reason"] == "cancelled" and done["unprocessed"] == 3
+    assert emitted[-1] is None
+
+
+def test_stream_close_sets_cancel(monkeypatch):
+    import asyncio
+    from app import main
+    from app.llm import LLMClient
+
+    def slow_pipeline(*, emit, control, **kw):
+        control.cancel.wait(5)   # simulate a long stage that observes the flag
+        emit(None)
+
+    monkeypatch.setattr(main, "_pipeline", slow_pipeline)
+
+    async def go():
+        gen = main._run_stream(llm=LLMClient("openai", "sk-test"), filename="p.pdf", data=b"x",
+                               openalex_key=None, check_hallucination=True,
+                               check_misquote=False, max_tokens=1000, safe=str)
+        first = await gen.__anext__()
+        assert '"ready"' in first
+        await gen.aclose()
+        return main._LAST_CONTROL["control"].cancel.is_set()
+
+    assert asyncio.run(go()) is True

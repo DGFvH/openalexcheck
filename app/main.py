@@ -22,10 +22,12 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
@@ -106,15 +108,13 @@ async def analyze(
         llm = LLMClient(provider, api_key, model)
     except LLMError as exc:
         raise HTTPException(400, safe(exc))
-    data = await file.read()
-    try:
-        text = extract_text(file.filename or "", data)
-    except ExtractionError as exc:
-        raise HTTPException(400, str(exc))
+    data = await file.read()  # UploadFile.read is threadpool-backed (non-blocking)
 
-    # --- heavy work streamed as NDJSON --------------------------------------
+    # --- everything else, including text extraction, streamed as NDJSON ----
+    # (pypdf/python-docx parsing is CPU-bound and used to run on the event loop
+    # before the stream existed; an extraction failure is now the first event.)
     stream = _run_stream(
-        llm=llm, text=text, openalex_key=openalex_key or None,
+        llm=llm, filename=file.filename or "", data=data, openalex_key=openalex_key or None,
         check_hallucination=check_hallucination, check_misquote=check_misquote,
         max_tokens=max_tokens, safe=safe,
     )
@@ -125,84 +125,151 @@ async def analyze(
     )
 
 
-async def _run_stream(*, llm, text, openalex_key, check_hallucination,
-                      check_misquote, max_tokens, safe):
-    """Yield newline-delimited JSON events while a worker thread runs the
-    (blocking) pipeline. Heartbeats keep the connection warm during long
-    LLM calls so the request can't time out mid-analysis."""
-    loop = asyncio.get_running_loop()
-    queue: asyncio.Queue = asyncio.Queue()
+# Wall-clock budget for one analysis. Hosting platforms kill a function at their
+# maximum duration WITHOUT any event reaching the browser, so the pipeline stops
+# starting new work shortly before that and says so in the final 'done' event.
+ANALYSIS_BUDGET_S = float(os.environ.get("ANALYSIS_BUDGET_S", "270"))
+RESOLVE_WORKERS = int(os.environ.get("RESOLVE_WORKERS", "4"))
 
-    def emit(obj: Optional[dict]) -> None:
-        loop.call_soon_threadsafe(queue.put_nowait, obj)
+
+@dataclass
+class RunControl:
+    """Shared stop signal for one analysis: set by the client disconnecting
+    (cancel) or by the time budget. Checked between stages, before each
+    reference, before each misquote batch, and inside OpenAlex retry waits."""
+    cancel: threading.Event
+    deadline: float
+    reason: Optional[str] = None
+
+    def stopped(self) -> Optional[str]:
+        if self.reason is None:
+            if self.cancel.is_set():
+                self.reason = "cancelled"
+            elif time.monotonic() > self.deadline:
+                self.reason = "time_budget"
+                self.cancel.set()  # stop in-flight lookups / further batches too
+        return self.reason
+
+
+_LAST_CONTROL: dict = {}  # test hook: the RunControl of the most recent stream
+
+
+def _pipeline(*, emit: Callable[[Optional[dict]], None], control: RunControl, llm: LLMClient,
+              filename: str, data: bytes, openalex_key: Optional[str],
+              check_hallucination: bool, check_misquote: bool, max_tokens: int,
+              safe: Callable[[object], str]) -> None:
+    """The whole analysis, run on a worker thread; results leave via emit().
+    Kept separate from the asyncio plumbing so it can be tested directly."""
 
     def safe_notes(notes: list[str]) -> list[str]:
         return [safe(n) for n in notes]
 
-    def worker() -> None:
+    try:
+        emit({"type": "progress", "stage": "read", "message": "Reading the document…"})
         try:
-            emit({"type": "progress", "stage": "extract",
-                  "message": "Reading the document and extracting references + citation contexts…"})
-            refs, orphans = extract_references(llm, text, max_tokens=max_tokens)
-            if not refs and not orphans:
-                emit({"type": "error", "detail": "No references were found in the document."})
-                return
-            emit({"type": "progress", "stage": "extract_done",
-                  "reference_count": len(refs),
-                  "message": f"Found {len(refs)} references. Verifying against OpenAlex…"})
-            if orphans:
-                # In-text citations with no bibliography entry — the reader can
-                # never look these up, so they are flagged in their own right.
-                emit({"type": "orphans", "items": [
-                    {"label": safe(o["label"]), "year": o["year"],
-                     "context": safe(o["context"])} for o in orphans]})
+            text = extract_text(filename, data)
+        except ExtractionError as exc:
+            emit({"type": "error", "detail": str(exc)})
+            return
+        emit({"type": "progress", "stage": "extract",
+              "message": "Extracting references + citation contexts with the LLM…"})
+        refs, orphans = extract_references(llm, text, max_tokens=max_tokens)
+        if not refs and not orphans:
+            emit({"type": "error", "detail": "No references were found in the document."})
+            return
+        emit({"type": "progress", "stage": "extract_done",
+              "reference_count": len(refs),
+              "message": f"Found {len(refs)} references. Verifying against OpenAlex…"})
+        if orphans:
+            # In-text citations with no bibliography entry — the reader can
+            # never look these up, so they are flagged in their own right.
+            emit({"type": "orphans", "items": [
+                {"label": safe(o["label"]), "year": o["year"],
+                 "context": safe(o["context"])} for o in orphans]})
 
-            found_items = []
-            total = len(refs)
-            for i, ref in enumerate(refs, 1):
-                emit({"type": "progress", "stage": "verify", "done": i, "total": total,
-                      "message": f"Verifying reference {i} of {total} in OpenAlex…"})
-                res = resolve_reference(ref, api_key=openalex_key)
-                item = {
-                    "reference": ref, "status": res["status"], "work": res["work"],
-                    "candidates": res["candidates"], "notes": safe_notes(res["notes"]),
-                    "field_check": res.get("field_check", []),
-                    "field_mismatch_count": res.get("field_mismatch_count", 0),
-                    "misquote": None,
-                }
-                emit({"type": "result", "result": item})
-                if check_misquote and res["status"] == "found" and res["work"]:
-                    found_items.append({
-                        "id": ref["id"], "title": res["work"]["title"],
-                        "abstract": res["work"]["abstract"], "contexts": ref["contexts"],
-                    })
+        found_items = []
+        total = len(refs)
+        done_count = 0
+        reason: Optional[str] = None
+        # Lookups run on a small pool sharing ONE OpenAlex client; results are
+        # emitted strictly in reference order by this (the only emitting) thread.
+        with _openalex_client(openalex_key) as client:
+            pool = ThreadPoolExecutor(max_workers=RESOLVE_WORKERS)
+            try:
+                futures = [pool.submit(_safe_resolve, ref, openalex_key,
+                                       client=client, cancel=control.cancel) for ref in refs]
+                for i, (ref, fut) in enumerate(zip(refs, futures), 1):
+                    reason = control.stopped()
+                    if reason:
+                        break
+                    res = fut.result()  # OpenAlexAuthError propagates (config error)
+                    done_count = i
+                    emit({"type": "progress", "stage": "verify", "done": i, "total": total,
+                          "message": f"Verified reference {i} of {total} in OpenAlex…"})
+                    item = {
+                        "reference": ref, "status": res["status"], "work": res["work"],
+                        "candidates": res["candidates"], "notes": safe_notes(res["notes"]),
+                        "field_check": res.get("field_check", []),
+                        "field_mismatch_count": res.get("field_mismatch_count", 0),
+                        "misquote": None,
+                    }
+                    emit({"type": "result", "result": item})
+                    if check_misquote and res["status"] == "found" and res["work"]:
+                        found_items.append({
+                            "id": ref["id"], "title": res["work"]["title"],
+                            "abstract": res["work"]["abstract"], "contexts": ref["contexts"],
+                        })
+            finally:
+                pool.shutdown(wait=False, cancel_futures=True)
 
-            if check_misquote and found_items:
-                emit({"type": "progress", "stage": "misquote",
-                      "message": f"Comparing {len(found_items)} citation contexts against their abstracts…"})
-                for result in compare_contexts(llm, found_items, max_tokens=max_tokens):
-                    emit({"type": "misquote", "id": result["id"], "misquote": result})
+        if check_misquote and found_items and not reason:
+            emit({"type": "progress", "stage": "misquote",
+                  "message": f"Comparing {len(found_items)} citation contexts against their abstracts…"})
+            for result in compare_contexts(llm, found_items, max_tokens=max_tokens,
+                                           cancel=control.cancel):
+                emit({"type": "misquote", "id": result["id"], "misquote": result})
+                reason = control.stopped()
+                if reason:
+                    break
 
-            emit({"type": "done",
-                  "checks": {"hallucination": check_hallucination, "misquote": check_misquote},
-                  "reference_count": total})
-        except OpenAlexAuthError as exc:
-            emit({"type": "error", "detail": safe(exc)})
-        except LLMError as exc:
-            emit({"type": "error", "detail": safe(exc)})
-        except Exception as exc:  # never leak internals or keys
-            log.exception("analysis pipeline failed")
-            emit({"type": "error", "detail": safe(f"Unexpected error during analysis: {exc}")})
-        finally:
-            emit(None)  # sentinel: worker finished
+        emit({"type": "done",
+              "checks": {"hallucination": check_hallucination, "misquote": check_misquote},
+              "reference_count": total, "incomplete": bool(reason),
+              "unprocessed": total - done_count, "reason": reason})
+    except OpenAlexAuthError as exc:
+        emit({"type": "error", "detail": safe(exc)})
+    except LLMError as exc:
+        emit({"type": "error", "detail": safe(exc)})
+    except Exception as exc:  # never leak internals or keys
+        log.exception("analysis pipeline failed")
+        emit({"type": "error", "detail": safe(f"Unexpected error during analysis: {exc}")})
+    finally:
+        emit(None)  # sentinel: worker finished
 
-    task = loop.run_in_executor(None, worker)
+
+async def _run_stream(**kw):
+    """Yield newline-delimited JSON events while a worker thread runs the
+    (blocking) pipeline. Heartbeats keep the connection warm during long LLM
+    calls; a client disconnect sets the run's cancel flag so the worker stops
+    spending the user's key at its next checkpoint."""
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue = asyncio.Queue()
+    control = RunControl(cancel=threading.Event(), deadline=time.monotonic() + ANALYSIS_BUDGET_S)
+    _LAST_CONTROL["control"] = control
+
+    def emit(obj: Optional[dict]) -> None:
+        try:
+            loop.call_soon_threadsafe(queue.put_nowait, obj)
+        except RuntimeError:
+            pass  # loop already closed (client gone) — the worker is winding down
+
+    task = loop.run_in_executor(None, lambda: _pipeline(emit=emit, control=control, **kw))
     # A padded first line forces intermediary proxies/gzip buffers to flush
     # early, so the browser starts receiving events immediately instead of only
     # after the whole (long) analysis is buffered up.
-    yield json.dumps({"type": "ready", "_pad": " " * 2048}) + "\n"
     start = time.monotonic()
     try:
+        yield json.dumps({"type": "ready", "_pad": " " * 2048}) + "\n"
         while True:
             try:
                 obj = await asyncio.wait_for(queue.get(), timeout=2.0)
@@ -213,8 +280,14 @@ async def _run_stream(*, llm, text, openalex_key, check_hallucination,
             if obj is None:
                 break
             yield json.dumps(obj) + "\n"
+        await task  # finished normally
+    except (asyncio.CancelledError, GeneratorExit):
+        # Client disconnected / Stop pressed. Do NOT await the worker here (the
+        # response is inside a cancel scope); it observes the flag and exits.
+        control.cancel.set()
+        raise
     finally:
-        await task
+        control.cancel.set()
 
 
 class CompareItem(BaseModel):
