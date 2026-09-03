@@ -880,3 +880,43 @@ def test_verify_single_accepts_stringified_first_reference(monkeypatch):
     monkeypatch.setattr(main, "resolve_reference", fake_resolve)
     r = TestClient(main.app).post("/api/verify", json={"references": ['{"title":"Stringy"}']})
     assert r.status_code == 200 and captured["title"] == "Stringy"
+
+
+# ---------------------------------------------------------------------------
+# Commit 5: provider HTTP timeouts scale with max_tokens; timeouts are named
+# ---------------------------------------------------------------------------
+
+def test_post_json_timeout_scales_and_is_named(monkeypatch):
+    import httpx
+    from app import llm
+    captured = {}
+
+    class R:
+        status_code = 200
+
+        def json(self):
+            return {"ok": 1}
+
+    def fake_post(url, json=None, headers=None, timeout=None):
+        captured["timeout"] = timeout
+        return R()
+
+    monkeypatch.setattr(llm.httpx, "post", fake_post)
+    llm._post_json("https://x", {}, {}, "OpenAI", max_tokens=16000)
+    assert captured["timeout"].read == pytest.approx(min(llm.LLM_READ_TIMEOUT_CAP_S, 60 + 16000 / 20))
+    llm._post_json("https://x", {}, {}, "OpenAI", max_tokens=64000)
+    assert captured["timeout"].read == llm.LLM_READ_TIMEOUT_CAP_S
+
+    def slow(url, json=None, headers=None, timeout=None):
+        raise httpx.ReadTimeout("x")
+
+    monkeypatch.setattr(llm.httpx, "post", slow)
+    with pytest.raises(llm.LLMError, match="did not answer"):
+        llm._post_json("https://x", {}, {}, "Gemini", max_tokens=8000)
+
+    def down(url, json=None, headers=None, timeout=None):
+        raise httpx.ConnectError("x")
+
+    monkeypatch.setattr(llm.httpx, "post", down)
+    with pytest.raises(llm.LLMError, match="Could not reach"):
+        llm._post_json("https://x", {}, {}, "Gemini")

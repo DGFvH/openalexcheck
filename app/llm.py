@@ -7,10 +7,16 @@ of the analysis, and is never written to disk or logs.
 from __future__ import annotations
 
 import json
+import os
 import re
 from typing import Optional
 
 import httpx
+
+# Read timeout for the non-streaming providers scales with the requested
+# output size (a 16k-token JSON reply takes minutes); capped below the hosting
+# platform's function ceiling so a stuck call fails with a clear message.
+LLM_READ_TIMEOUT_CAP_S = float(os.environ.get("LLM_READ_TIMEOUT_CAP_S", "280"))
 
 DEFAULT_MODELS = {
     "anthropic": "claude-opus-4-8",
@@ -117,6 +123,7 @@ class LLMClient:
             body,
             headers={"Authorization": f"Bearer {self._api_key}"},
             provider="OpenAI",
+            max_tokens=max_tokens,
         )
         try:
             choice = data["choices"][0]
@@ -143,6 +150,7 @@ class LLMClient:
             body,
             headers={"x-goog-api-key": self._api_key},
             provider="Gemini",
+            max_tokens=max_tokens,
         )
         try:
             cand = data["candidates"][0]
@@ -159,9 +167,21 @@ class LLMClient:
         return text, truncated
 
 
-def _post_json(url: str, body: dict, headers: dict, provider: str) -> dict:
+def _read_timeout(max_tokens: int) -> float:
+    return min(LLM_READ_TIMEOUT_CAP_S, 60.0 + max_tokens / 20.0)
+
+
+def _post_json(url: str, body: dict, headers: dict, provider: str,
+               max_tokens: int = 8000) -> dict:
+    read = _read_timeout(max_tokens)
+    timeout = httpx.Timeout(connect=10.0, read=read, write=30.0, pool=10.0)
     try:
-        resp = httpx.post(url, json=body, headers=headers, timeout=180.0)
+        resp = httpx.post(url, json=body, headers=headers, timeout=timeout)
+    except httpx.TimeoutException as exc:
+        raise LLMError(
+            f"The {provider} API did not answer within {int(read)} s. Lower "
+            "'Max output tokens per LLM call', pick a faster model, or retry."
+        ) from exc
     except httpx.HTTPError as exc:
         raise LLMError(f"Could not reach the {provider} API: {exc}") from exc
     if resp.status_code in (401, 403):
