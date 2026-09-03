@@ -1,3 +1,5 @@
 # Build-time only (not needed to run the app).
 # Regenerate the EduGenAI instructions PDF: python scripts/build_edugenai_pdf.py
 reportlab>=4.0
+
+pytest>=8
