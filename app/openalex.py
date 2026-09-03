@@ -9,9 +9,11 @@ import logging
 import os
 import re
 import string
+import threading
 import time
+from contextlib import nullcontext
 from difflib import SequenceMatcher
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import httpx
 
@@ -32,6 +34,45 @@ FUZZY_THRESHOLD = 0.55
 
 _PUNCT_TABLE = str.maketrans({c: " " for c in string.punctuation})
 
+RETRY_AFTER_CAP_S = 10.0
+
+
+class TokenBucket:
+    """Process-wide pacing of OpenAlex requests (they are rate-limited per IP,
+    and a shared egress IP is easy to get throttled). Thread-safe; `rate <= 0`
+    disables pacing. `clock`/`sleep` are injectable for tests."""
+
+    def __init__(self, rate: float, capacity: float,
+                 clock: Callable[[], float] = time.monotonic,
+                 sleep: Callable[[float], None] = time.sleep):
+        self.rate, self.capacity = float(rate), float(capacity)
+        self._clock, self._sleep = clock, sleep
+        self._tokens = self.capacity
+        self._last = clock()
+        self._lock = threading.Lock()
+
+    def acquire(self, cancel: Optional[threading.Event] = None) -> None:
+        if self.rate <= 0:
+            return
+        while True:
+            with self._lock:
+                now = self._clock()
+                self._tokens = min(self.capacity, self._tokens + (now - self._last) * self.rate)
+                self._last = now
+                if self._tokens >= 1:
+                    self._tokens -= 1
+                    return
+                wait = min((1 - self._tokens) / self.rate, 0.25)
+            if cancel is not None:
+                if cancel.wait(wait):
+                    raise OpenAlexLookupError("cancelled")
+            else:
+                self._sleep(wait)
+
+
+_BUCKET = TokenBucket(rate=float(os.environ.get("OPENALEX_RPS", "8")), capacity=8)
+_WARNED = {"mailto": False}
+
 
 def _client(api_key: Optional[str] = None) -> httpx.Client:
     """OpenAlex client. `api_key` is the user's optional Premium key — one-time
@@ -42,6 +83,10 @@ def _client(api_key: Optional[str] = None) -> httpx.Client:
     mailto = os.environ.get("OPENALEX_MAILTO")
     if mailto:
         params["mailto"] = mailto
+    elif not _WARNED["mailto"]:
+        _WARNED["mailto"] = True
+        log.warning("OPENALEX_MAILTO is not set — OpenAlex requests go to the common "
+                    "(more heavily rate-limited) pool. Set it in the deployment's environment.")
     if api_key and api_key.strip():
         params["api_key"] = api_key.strip()
     return httpx.Client(base_url=OPENALEX_BASE, params=params, timeout=30.0,
@@ -135,17 +180,49 @@ def _check_auth(resp: httpx.Response, key_sent: bool) -> None:
                                   status=resp.status_code)
 
 
+def _retry_after(resp: Any) -> Optional[float]:
+    """Seconds OpenAlex asked us to wait, capped so one slow reference cannot
+    stall a run; None when the header is absent or not a plain integer."""
+    value = (getattr(resp, "headers", None) or {}).get("Retry-After")
+    try:
+        return min(float(int(value)), RETRY_AFTER_CAP_S) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+_BUDGET_RE = re.compile(r"insufficient budget|daily (?:limit|quota|budget)|resets at midnight", re.I)
+
+
+def _budget_exhausted(resp: Any) -> bool:
+    """OpenAlex's 429 for an exhausted DAILY budget — retrying is pointless."""
+    return bool(_BUDGET_RE.search(getattr(resp, "text", "") or ""))
+
+
+def _sleep(delay: float, cancel: Optional[threading.Event]) -> None:
+    """Retry back-off that a cancelled run can interrupt."""
+    if cancel is None:
+        time.sleep(delay)
+    elif cancel.wait(delay):
+        raise OpenAlexLookupError("cancelled")
+
+
 def _get(client: httpx.Client, path: str, params: Optional[dict] = None,
-         attempts: int = 3) -> httpx.Response:
+         attempts: int = 3, *, cancel: Optional[threading.Event] = None) -> httpx.Response:
     """GET with retry on transient failures (network errors, 429, 5xx).
 
     A transient failure here would otherwise masquerade as 'reference not found'
     and produce a false hallucination flag — so we retry, then raise loudly.
+    Requests are paced through the process-wide token bucket; a 429 honours
+    Retry-After; an exhausted daily budget is not retried; `cancel` aborts.
     """
     key_sent = "api_key" in (getattr(client, "params", None) or {})
     last_status: Optional[int] = None
     last_error: Optional[str] = None
     for i in range(attempts):
+        if cancel is not None and cancel.is_set():
+            raise OpenAlexLookupError("cancelled")
+        _BUCKET.acquire(cancel)
+        delay = 0.5 * (i + 1)
         try:
             resp = client.get(path, params=params)
         except httpx.HTTPError as exc:
@@ -159,9 +236,13 @@ def _get(client: httpx.Client, path: str, params: Optional[dict] = None,
                 # Non-transient client error (bad query etc.) — don't spin.
                 return resp
             last_status, last_error = resp.status_code, None
+            if resp.status_code == 429 and _budget_exhausted(resp):
+                log.warning("OpenAlex daily budget exhausted — not retrying")
+                raise OpenAlexLookupError("OpenAlex's daily request budget is exhausted", status=429)
+            delay = _retry_after(resp) or delay
             log.warning("OpenAlex returned %d, attempt %d/%d", last_status, i + 1, attempts)
         if i < attempts - 1:
-            time.sleep(0.5 * (i + 1))
+            _sleep(delay, cancel)
     if last_status is not None:
         raise OpenAlexLookupError(f"OpenAlex returned {last_status}", status=last_status)
     raise OpenAlexLookupError(f"OpenAlex could not be reached ({last_error or 'unknown error'})")
@@ -176,8 +257,9 @@ def _lookup_note(exc: Exception, what: str) -> str:
     return f"OpenAlex could not be reached for the {what}."
 
 
-def _get_work_by_doi(client: httpx.Client, doi: str) -> Optional[dict]:
-    resp = _get(client, f"/works/https://doi.org/{doi}")
+def _get_work_by_doi(client: httpx.Client, doi: str, *,
+                     cancel: Optional[threading.Event] = None) -> Optional[dict]:
+    resp = _get(client, f"/works/https://doi.org/{doi}", cancel=cancel)
     if resp.status_code == 404:
         return None
     if resp.status_code >= 400:
@@ -198,7 +280,8 @@ def _search_query(title: str) -> str:
     return " ".join((title or "").translate(_SEARCH_PUNCT_TABLE).split())
 
 
-def _search_works_by_title(client: httpx.Client, title: str, per_page: int = 6) -> list[dict]:
+def _search_works_by_title(client: httpx.Client, title: str, per_page: int = 6, *,
+                           cancel: Optional[threading.Event] = None) -> list[dict]:
     # Try the apostrophe-preserving query first; fall back to the fully
     # normalized form on ANY failure (error status or zero hits).
     queries = [q for q in dict.fromkeys([_search_query(title), normalize_title(title)]) if q]
@@ -206,7 +289,8 @@ def _search_works_by_title(client: httpx.Client, title: str, per_page: int = 6) 
         raise OpenAlexLookupError("The title contains no searchable text")
     errors: list[int] = []
     for q in queries:
-        resp = _get(client, "/works", params={"filter": f"title.search:{q}", "per-page": per_page})
+        resp = _get(client, "/works", params={"filter": f"title.search:{q}", "per-page": per_page},
+                    cancel=cancel)
         if resp.status_code >= 400:
             errors.append(resp.status_code)
             continue
@@ -254,12 +338,18 @@ def _found(ref: dict, work: dict, notes: list[str]) -> dict:
             "field_check": fields, "field_mismatch_count": len(mism)}
 
 
-def resolve_reference(ref: dict, api_key: Optional[str] = None) -> dict:
+def resolve_reference(ref: dict, api_key: Optional[str] = None, *,
+                      client: Optional[httpx.Client] = None,
+                      cancel: Optional[threading.Event] = None) -> dict:
     """Resolve one extracted reference against OpenAlex.
 
     Returns {"status": "found"|"fuzzy"|"not_found"|"lookup_failed", "work": ...,
              "candidates": [...], "notes": [...], and for 'found':
              "field_check": [...], "field_mismatch_count": N}
+
+    `client`: reuse one connection pool across a whole bibliography (a fresh
+    TLS handshake per reference otherwise). `cancel`: a stopped run aborts at
+    the next request or back-off.
     """
     notes: list[str] = []
     candidates: list[dict] = []
@@ -274,12 +364,12 @@ def resolve_reference(ref: dict, api_key: Optional[str] = None) -> dict:
                           "not checked. Provide the full reference entry to verify it."]}
 
     lookup_failed = False
-    with _client(api_key) as client:
+    with (nullcontext(client) if client is not None else _client(api_key)) as client:
         doi = clean_doi(ref.get("doi") or "")
         doi_work = None
         if doi:
             try:
-                raw = _get_work_by_doi(client, doi)
+                raw = _get_work_by_doi(client, doi, cancel=cancel)
             except (httpx.HTTPError, OpenAlexLookupError) as exc:
                 raw = None
                 lookup_failed = True
@@ -300,7 +390,7 @@ def resolve_reference(ref: dict, api_key: Optional[str] = None) -> dict:
         title = ref.get("title") or ""
         if title:
             try:
-                results = _search_works_by_title(client, title)
+                results = _search_works_by_title(client, title, cancel=cancel)
             except (httpx.HTTPError, OpenAlexLookupError) as exc:
                 results = []
                 lookup_failed = True

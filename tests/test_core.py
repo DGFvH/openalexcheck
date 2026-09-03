@@ -643,9 +643,11 @@ def test_redact_strips_percent_encoded_key():
 
 
 class _StubResp:
-    def __init__(self, status, payload=None):
+    def __init__(self, status, payload=None, headers=None, text=""):
         self.status_code = status
         self._payload = payload or {}
+        self.headers = headers or {}
+        self.text = text
 
     def json(self):
         return self._payload
@@ -749,3 +751,90 @@ def test_httpx_logger_is_quiet():
     import logging
     import app.main  # noqa: F401  (import side effect)
     assert logging.getLogger("httpx").level == logging.WARNING
+
+
+# ---------------------------------------------------------------------------
+# Commit 3: OpenAlex pacing, Retry-After, daily budget, cancel + client reuse
+# ---------------------------------------------------------------------------
+
+def test_token_bucket_paces_requests():
+    from app.openalex import TokenBucket
+    clock = {"t": 0.0}
+    slept = []
+
+    def sleep(s):
+        slept.append(s)
+        clock["t"] += s
+
+    b = TokenBucket(rate=2, capacity=2, clock=lambda: clock["t"], sleep=sleep)
+    for _ in range(4):          # 2 immediate, then ~0.5 s per token at 2/s
+        b.acquire()
+    assert abs(sum(slept) - 1.0) < 1e-6
+    assert TokenBucket(rate=0, capacity=1).acquire() is None   # disabled = no wait
+
+
+def test_get_honours_retry_after_capped(monkeypatch):
+    from app import openalex
+    slept = []
+    monkeypatch.setattr(openalex.time, "sleep", lambda s: slept.append(s))
+    stub = _StubClient([_StubResp(429, headers={"Retry-After": "3"}), _StubResp(200, {"ok": 1})])
+    assert openalex._get(stub, "/works").status_code == 200
+    assert slept == [3.0]
+    slept.clear()
+    stub = _StubClient([_StubResp(503, headers={"Retry-After": "999"}), _StubResp(200)])
+    openalex._get(stub, "/works")
+    assert slept == [openalex.RETRY_AFTER_CAP_S]
+
+
+def test_get_stops_on_exhausted_daily_budget(monkeypatch):
+    from app import openalex
+    monkeypatch.setattr(openalex.time, "sleep", lambda s: None)
+    body = ('{"error":"Rate limit exceeded","message":"Insufficient budget. This request '
+            'costs $0.001 but you only have $0 remaining. Resets at midnight UTC."}')
+    stub = _StubClient([_StubResp(429, text=body)] * 3)
+    with pytest.raises(openalex.OpenAlexLookupError) as ei:
+        openalex._get(stub, "/works")
+    assert stub.calls == 1 and ei.value.status == 429
+
+
+def test_get_aborts_when_cancelled(monkeypatch):
+    import threading
+    from app import openalex
+    cancel = threading.Event()
+    cancel.set()
+    stub = _StubClient([_StubResp(200)])
+    with pytest.raises(openalex.OpenAlexLookupError):
+        openalex._get(stub, "/works", cancel=cancel)
+    assert stub.calls == 0
+    # Cancel raised during the retry back-off, not after all attempts.
+    cancel2 = threading.Event()
+    calls = {"n": 0}
+
+    class Flaky:
+        def get(self, path, params=None):
+            calls["n"] += 1
+            cancel2.set()
+            return _StubResp(503)
+
+    with pytest.raises(openalex.OpenAlexLookupError):
+        openalex._get(Flaky(), "/works", cancel=cancel2)
+    assert calls["n"] == 1
+
+
+def test_resolve_uses_passed_client(monkeypatch):
+    from app import openalex
+    monkeypatch.setattr(openalex, "_client", lambda key=None: (_ for _ in ()).throw(AssertionError("must reuse client")))
+    stub = _StubClient([_StubResp(200, {"results": []})] * 4)
+    res = openalex.resolve_reference({"title": "Some paper", "year": 2020}, client=stub)
+    assert res["status"] == "not_found" and stub.calls >= 1
+
+
+def test_mailto_warning_logged_once(monkeypatch, caplog):
+    import logging
+    from app import openalex
+    monkeypatch.delenv("OPENALEX_MAILTO", raising=False)
+    monkeypatch.setitem(openalex._WARNED, "mailto", False)
+    with caplog.at_level(logging.WARNING, logger="phantocite.openalex"):
+        openalex._client().close()
+        openalex._client().close()
+    assert sum("OPENALEX_MAILTO" in r.message for r in caplog.records) == 1
