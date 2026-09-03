@@ -380,7 +380,11 @@ function switchTab(name) {
   $("screen-fuzzy").classList.toggle("hidden", name !== "fuzzy");
 }
 
+window.addEventListener("beforeunload", e => { if (ABORT) { e.preventDefault(); e.returnValue = ""; } });
 let FINALIZED = false;
+let TERMINAL = false;      // a done/error event was received for the current run
+let PARTIAL = false;       // the current results are known to be incomplete
+let EXPECTED_TOTAL = null; // reference count announced by extract_done
 let ABORT = null;          // AbortController for the in-flight analysis
 let STATUS_BASE = "";      // current status text, without the elapsed suffix
 const CARDS = {}; // reference id -> card element, for live patching
@@ -393,6 +397,7 @@ function stopAnalysis() {
 
 function endRunUI() {
   $("run").disabled = false;
+  $("sample").disabled = false;
   $("run").classList.remove("hidden");
   $("stop").classList.add("hidden");
   const dot = $("progress-panel").querySelector(".dot");
@@ -507,7 +512,7 @@ function showSample() {
   DATA = { checks: { hallucination: true, misquote: true }, results: JSON.parse(JSON.stringify(SAMPLE)),
            orphans: [{ label: "Doe & Lee (2021)", year: 2021,
                        context: "Choice architecture further amplifies these effects (Doe & Lee, 2021)." }] };
-  FINALIZED = false;
+  FINALIZED = false; TERMINAL = true; PARTIAL = false; EXPECTED_TOTAL = null;
   for (const k in CARDS) delete CARDS[k];
   $("error").classList.add("hidden");
   $("progress-panel").classList.add("hidden");
@@ -550,8 +555,14 @@ async function runAnalysis() {
   $("results-area").classList.add("hidden");
   $("screen-results").innerHTML = "";
   $("screen-fuzzy").innerHTML = "";
+  $("orphans").innerHTML = "";           // never show a previous paper's data
+  $("summary").innerHTML = "";
+  $("fuzzy-count").textContent = "";
+  $("downloads").style.display = "none";
   $("progress-log").innerHTML = "";
   $("progress-bar").style.width = "0%";
+  $("sample").disabled = true;           // it would silently abort this run
+  TERMINAL = false; PARTIAL = false; EXPECTED_TOTAL = null;
   setStatus("Starting…");
   $("progress-panel").classList.remove("hidden");
   $("progress-panel").querySelector(".dot").style.animationPlayState = "running";
@@ -562,13 +573,25 @@ async function runAnalysis() {
     if (!resp.ok) {
       // Early validation error — a normal JSON error, not a stream.
       const body = await resp.json().catch(() => ({}));
-      throw new Error(typeof body.detail === "string" ? body.detail : `Request failed (${resp.status})`);
+      const detail = typeof body.detail === "string" ? body.detail
+        : Array.isArray(body.detail) ? body.detail.map(d => d.msg || JSON.stringify(d)).join("; ") : "";
+      const byStatus = { 413: "The file is too large for the server — try a smaller PDF, or export the paper as DOCX.",
+                         502: "The server timed out or restarted — try again, or use a shorter document.",
+                         504: "The server timed out — try again, or use a shorter document." };
+      throw new Error(detail || byStatus[resp.status] || `Request failed (${resp.status})`);
     }
     await consumeStream(resp.body);
+    if (!TERMINAL) {
+      // Clean EOF without done/error: the hosting platform killed the function
+      // or a proxy dropped the stream. Never present that as a complete run.
+      showError("The connection ended before the analysis finished (server time limit or network drop) — showing partial results.");
+      finalize({ partial: true, reason: "disconnect" });
+    }
   } catch (err) {
     if (err && err.name === "AbortError") {
       setStatus("Stopped.");
       logLine("Analysis stopped by user.");
+      if (!TERMINAL) finalize({ partial: true, reason: "stopped" });
     } else {
       // "Failed to fetch" and friends surface here.
       showError((err && err.message) ? err.message : "The connection was lost. Please try again.");
@@ -592,10 +615,16 @@ async function consumeStream(body) {
     while ((nl = buf.indexOf("\n")) !== -1) {
       const line = buf.slice(0, nl).trim();
       buf = buf.slice(nl + 1);
-      if (line) handleEvent(JSON.parse(line));
+      if (line) handleLine(line);
     }
   }
-  if (buf.trim()) handleEvent(JSON.parse(buf.trim()));
+  if (buf.trim()) handleLine(buf.trim());
+}
+
+function handleLine(line) {
+  let ev;
+  try { ev = JSON.parse(line); } catch (e) { return; }  // a cut-off fragment, not an event
+  handleEvent(ev);
 }
 
 function logLine(msg, tick) {
@@ -618,8 +647,9 @@ function handleEvent(ev) {
     }
     case "progress": {
       setStatus(ev.message || ev.stage);
-      if (ev.stage === "extract") { $("progress-bar").style.width = "4%"; logLine(ev.message); }
-      else if (ev.stage === "extract_done") { logLine(ev.message, true); $("progress-bar").style.width = "8%"; }
+      if (ev.stage === "read") { $("progress-bar").style.width = "2%"; logLine(ev.message); }
+      else if (ev.stage === "extract") { $("progress-bar").style.width = "4%"; logLine(ev.message); }
+      else if (ev.stage === "extract_done") { EXPECTED_TOTAL = ev.reference_count ?? null; logLine(ev.message, true); $("progress-bar").style.width = "8%"; }
       else if (ev.stage === "verify") $("progress-bar").style.width = (8 + 72 * (ev.done / ev.total)).toFixed(0) + "%";
       else if (ev.stage === "misquote") { logLine(ev.message); $("progress-bar").style.width = "84%"; }
       else logLine(ev.message);
@@ -645,13 +675,17 @@ function handleEvent(ev) {
       break;
     }
     case "done": {
+      TERMINAL = true;
       DATA.checks = ev.checks;
-      finalize();
+      finalize({ partial: !!ev.incomplete, unprocessed: ev.unprocessed, reason: ev.reason });
       break;
     }
     case "error": {
+      TERMINAL = true;
       showError(ev.detail || "Analysis failed.");
       $("progress-status").textContent = "Failed.";
+      // Keep and export whatever was verified before the failure.
+      if (DATA.results.length || (DATA.orphans || []).length) finalize({ partial: true, reason: "error" });
       break;
     }
   }
@@ -735,10 +769,28 @@ function updateSummary() {
   $("fuzzy-count").textContent = fuzzy ? `(${fuzzy})` : "";
 }
 
-function finalize() {
+function partialMessage(opts) {
+  const why = { stopped: "Stopped by you", cancelled: "Stopped by you",
+                time_budget: "The server's time budget ran out",
+                disconnect: "The connection ended before the analysis finished",
+                error: "The analysis failed partway" }[opts.reason] || "The analysis did not finish";
+  const unprocessed = (opts.unprocessed != null) ? opts.unprocessed
+    : (EXPECTED_TOTAL != null ? Math.max(0, EXPECTED_TOTAL - DATA.results.length) : null);
+  const total = EXPECTED_TOTAL != null ? EXPECTED_TOTAL : DATA.results.length + (unprocessed || 0);
+  let what;
+  if (unprocessed) what = `${unprocessed} of ${total} references were not verified.`;
+  else if (DATA.checks && DATA.checks.misquote && DATA.results.some(r => r.status === "found" && !r.misquote))
+    what = "The misquote comparison did not finish for every reference.";
+  else what = "Results below are partial.";
+  return `${why} — ${what}`;
+}
+
+function finalize(opts) {
+  opts = opts || {};
   FINALIZED = true;
-  $("progress-status").textContent = "Done.";
-  $("progress-bar").style.width = "100%";
+  PARTIAL = !!opts.partial;
+  $("progress-status").textContent = PARTIAL ? "Stopped — partial results." : "Done.";
+  if (!PARTIAL) $("progress-bar").style.width = "100%";
   // Re-render the results screen sorted by severity (worst problems first),
   // now that every reference — with field checks and misquote verdicts — is in.
   const ordered = DATA.results.slice().sort((a, b) =>
@@ -752,6 +804,13 @@ function finalize() {
   attachFuzzyHandlers();
   renderOrphans();
   updateSummary();
+  if (PARTIAL) {
+    const banner = document.createElement("div");
+    banner.className = "sample-banner partial-banner";
+    banner.textContent = "⚠ " + partialMessage(opts);
+    $("screen-results").prepend(banner);
+    ensureResultsVisible();
+  }
   $("downloads").style.display = (DATA.results.length || (DATA.orphans || []).length) ? "flex" : "none";
 }
 
@@ -812,6 +871,7 @@ function usageVerdict(r) {
   const m = r.misquote;
   if (!m) {
     if (r.status === "found" && !FINALIZED) return { label: "Checking…", cls: "muted" };
+    if (r.status === "found") return { label: "Not checked", cls: "muted" };
     return { label: "n/a", cls: "muted" };
   }
   if (m.verdict === "mismatch" || m.verdict === "likely_mismatch") return { label: "Review", cls: "bad" };
@@ -936,7 +996,7 @@ function renderMisquote(r) {
     if (r.status === "found" && !FINALIZED)
       body = `<div class="meta">⏳ Comparing the citation context against the abstract…</div>`;
     else if (r.status === "found")
-      body = `<div class="meta">Usage check unavailable for this reference.</div>`;
+      body = `<div class="meta">Usage check not run for this reference — the run ended before the comparison.</div>`;
     else
       body = `<div class="meta">Only run for verified references.</div>`;
   } else {
