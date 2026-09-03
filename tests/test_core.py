@@ -242,7 +242,7 @@ def test_verify_endpoints(monkeypatch):
     from fastapi.testclient import TestClient
     from app import main
 
-    def fake_resolve(ref, api_key=None):
+    def fake_resolve(ref, api_key=None, **kw):
         if "cheese" in (ref.get("title") or "").lower():
             return {"status": "not_found", "work": None, "candidates": [], "notes": []}
         return {"status": "found",
@@ -291,7 +291,7 @@ def test_verify_accepts_messy_llm_input(monkeypatch):
 
     captured = {}
 
-    def fake_resolve(ref, api_key=None):
+    def fake_resolve(ref, api_key=None, **kw):
         captured["ref"] = ref
         return {"status": "found",
                 "work": {"title": ref.get("title"), "authors": [], "year": None,
@@ -352,7 +352,7 @@ def test_verify_tolerates_any_request_shape(monkeypatch):
 
     seen = {"key": "sentinel"}
 
-    def fake_resolve(ref, api_key=None):
+    def fake_resolve(ref, api_key=None, **kw):
         seen["key"] = api_key
         return {"status": "found",
                 "work": {"title": ref.get("title"), "authors": [], "year": None,
@@ -838,3 +838,45 @@ def test_mailto_warning_logged_once(monkeypatch, caplog):
         openalex._client().close()
         openalex._client().close()
     assert sum("OPENALEX_MAILTO" in r.message for r in caplog.records) == 1
+
+
+# ---------------------------------------------------------------------------
+# Commit 4: verify endpoints run off the event loop with a shared client
+# ---------------------------------------------------------------------------
+
+def test_verify_endpoints_run_off_event_loop(monkeypatch):
+    """The lookups are blocking I/O; if they ran on the loop thread, every
+    in-flight /api/analyze stream would stop ticking for the duration."""
+    import asyncio
+    from fastapi.testclient import TestClient
+    from app import main
+    seen = []
+
+    def fake_resolve(ref, api_key=None, **kw):
+        try:
+            asyncio.get_running_loop()
+            seen.append("on-loop")
+        except RuntimeError:
+            seen.append("off-loop")
+        assert kw.get("client") is None or hasattr(kw["client"], "get")
+        return {"status": "not_found", "work": None, "candidates": [], "notes": []}
+
+    monkeypatch.setattr(main, "resolve_reference", fake_resolve)
+    client = TestClient(main.app)
+    assert client.post("/api/verify", json={"title": "A"}).status_code == 200
+    assert client.post("/api/verify_batch", json={"references": [{"title": "A"}, {"title": "B"}]}).json()["count"] == 2
+    assert seen == ["off-loop"] * 3
+
+
+def test_verify_single_accepts_stringified_first_reference(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import main
+    captured = {}
+
+    def fake_resolve(ref, api_key=None, **kw):
+        captured["title"] = ref["title"]
+        return {"status": "not_found", "work": None, "candidates": [], "notes": []}
+
+    monkeypatch.setattr(main, "resolve_reference", fake_resolve)
+    r = TestClient(main.app).post("/api/verify", json={"references": ['{"title":"Stringy"}']})
+    assert r.status_code == 200 and captured["title"] == "Stringy"

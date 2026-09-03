@@ -38,7 +38,7 @@ from .analysis import compare_contexts, extract_references
 from .extract import ExtractionError, extract_text
 from .keysafety import redact
 from .llm import LLMClient, LLMError
-from .openalex import OpenAlexAuthError, resolve_reference
+from .openalex import OpenAlexAuthError, _client as _openalex_client, resolve_reference
 
 app = FastAPI(title="openalexcheck", docs_url=None, redoc_url=None)
 log = logging.getLogger("phantocite.main")
@@ -405,12 +405,12 @@ def _coerce_ref(raw: dict, idx: int = 1) -> dict:
     }
 
 
-def _safe_resolve(ref: dict, key: Optional[str]) -> dict:
+def _safe_resolve(ref: dict, key: Optional[str], **kw: Any) -> dict:
     """resolve_reference that never raises (except on a bad API key, which is a
     global config error worth surfacing) — a single odd reference must not sink
-    the whole batch."""
+    the whole batch. Extra kwargs (client=, cancel=) pass through."""
     try:
-        return resolve_reference(ref, api_key=key)
+        return resolve_reference(ref, api_key=key, **kw)
     except OpenAlexAuthError:
         raise
     except Exception:  # network oddities, unexpected data shapes, etc.
@@ -487,9 +487,13 @@ async def api_verify(request: Request, x_openalex_key: Optional[str] = Header(de
     if not references:
         references, body_key = _from_query(request)
     key = (x_openalex_key or body_key or "").strip() or None
-    first = references[0] if references and isinstance(references[0], dict) else {}
+    first = _loads_maybe(references[0]) if references else {}
+    if not isinstance(first, dict):
+        first = {}
     try:
-        res = _safe_resolve(_coerce_ref(first, 1), key)
+        # Off the event loop: the lookup is blocking I/O with retry sleeps, and
+        # every in-flight /api/analyze stream needs the loop free to keep ticking.
+        res = await asyncio.to_thread(_safe_resolve, _coerce_ref(first, 1), key)
     except OpenAlexAuthError as exc:
         raise HTTPException(400, redact(str(exc), key))
     resp = {**_verify_response(res), "api_version": API_VERSION}
@@ -498,14 +502,22 @@ async def api_verify(request: Request, x_openalex_key: Optional[str] = Header(de
     return resp
 
 
-def _batch_item(idx: int, raw: Any, key: Optional[str]) -> dict:
+def _batch_item(idx: int, raw: Any, key: Optional[str], **kw: Any) -> dict:
     raw = _loads_maybe(raw)  # a reference item may itself be stringified JSON
     if not isinstance(raw, dict):
         res = {"status": "lookup_failed", "work": None, "candidates": [],
                "notes": ["This entry could not be read as a reference object."]}
     else:
-        res = _safe_resolve(_coerce_ref(raw, idx), key)  # may raise OpenAlexAuthError
+        res = _safe_resolve(_coerce_ref(raw, idx), key, **kw)  # may raise OpenAlexAuthError
     return {"index": idx, **_verify_response(res)}
+
+
+def _run_batch(items: list, key: Optional[str]) -> list[dict]:
+    """Resolve a whole batch on worker threads sharing ONE OpenAlex client
+    (connection reuse instead of a TLS handshake per reference). Runs off the
+    event loop — see api_verify_batch."""
+    with _openalex_client(key) as client, ThreadPoolExecutor(max_workers=6) as pool:
+        return list(pool.map(lambda it: _batch_item(it[0], it[1], key, client=client), items))
 
 
 # Included in every verify response so a pasted extension transcript shows
@@ -580,8 +592,9 @@ async def api_verify_batch(request: Request, x_openalex_key: Optional[str] = Hea
     key = (x_openalex_key or body_key or "").strip() or None
     items = list(enumerate(references, 1))
     try:
-        with ThreadPoolExecutor(max_workers=6) as pool:
-            results = list(pool.map(lambda it: _batch_item(it[0], it[1], key), items))
+        # The pool join is blocking; keep it off the event loop so concurrent
+        # /api/analyze streams keep emitting their liveness ticks.
+        results = await asyncio.to_thread(_run_batch, items, key)
     except OpenAlexAuthError as exc:
         raise HTTPException(400, redact(str(exc), key))
     resp: dict = {"count": len(results), "results": results, "api_version": API_VERSION}
