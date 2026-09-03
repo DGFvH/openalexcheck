@@ -628,3 +628,124 @@ def test_display_exposes_minor_fields():
     assert d["minor_fields"] == ["journal"]
     assert d["mismatched_fields"] == []
     assert d["severity"] == 8  # minor variations don't raise severity
+
+
+# ---------------------------------------------------------------------------
+# Commit 2: OpenAlex error semantics, redaction coverage, logging, health
+# ---------------------------------------------------------------------------
+
+def test_redact_strips_percent_encoded_key():
+    from app.keysafety import redact
+    key = "ab/cd e+f"
+    msg = "GET https://api.openalex.org/works?api_key=ab%2Fcd%20e%2Bf and ab%2Fcd+e%2Bf and " + key
+    out = redact(msg, key)
+    assert key not in out and "ab%2Fcd" not in out
+
+
+class _StubResp:
+    def __init__(self, status, payload=None):
+        self.status_code = status
+        self._payload = payload or {}
+
+    def json(self):
+        return self._payload
+
+
+class _StubClient:
+    """Minimal OpenAlex client double: a scripted list of responses/exceptions,
+    usable as a context manager (resolve_reference does `with _client() as c`)."""
+
+    def __init__(self, script, params=None):
+        self.script = list(script)
+        self.params = params or {}
+        self.calls = 0
+
+    def get(self, path, params=None):
+        self.calls += 1
+        item = self.script.pop(0) if self.script else self.script_default()
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+    def script_default(self):
+        return _StubResp(200, {"results": []})
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def test_notes_never_contain_exception_text_or_url(monkeypatch):
+    """httpx exception text embeds the request URL (api_key included); notes
+    must carry only a status/class, never that text."""
+    import httpx
+    from app import openalex
+    stub = _StubClient([httpx.ConnectError("boom https://x?api_key=SECRET")] * 9)
+    monkeypatch.setattr(openalex, "_client", lambda key=None: stub)
+    monkeypatch.setattr(openalex.time, "sleep", lambda s: None)
+    res = openalex.resolve_reference({"title": "Some paper", "doi": "10.1/x", "year": 2020})
+    joined = " ".join(res["notes"])
+    assert res["status"] == "lookup_failed"
+    assert "SECRET" not in joined and "http" not in joined
+    assert "could not be reached" in joined
+
+
+def test_403_without_key_is_lookup_failure_not_auth_error():
+    from app import openalex
+    from app.openalex import OpenAlexAuthError, OpenAlexLookupError
+    with pytest.raises(OpenAlexLookupError) as ei:
+        openalex._get(_StubClient([_StubResp(403)]), "/works")
+    assert ei.value.status == 403
+    with pytest.raises(OpenAlexAuthError):
+        openalex._get(_StubClient([_StubResp(403)], params={"api_key": "k"}), "/works")
+
+
+def test_403_without_key_resolves_to_lookup_failed(monkeypatch):
+    from app import openalex
+    stub = _StubClient([_StubResp(403)] * 9)
+    monkeypatch.setattr(openalex, "_client", lambda key=None: stub)
+    res = openalex.resolve_reference({"title": "Some paper", "year": 2020})
+    assert res["status"] == "lookup_failed"
+    assert any("403" in n for n in res["notes"])
+
+
+def test_title_search_rejected_queries_raise_not_empty(monkeypatch):
+    """Every query rejected (4xx) = 'could not search', which must become
+    lookup_failed — not 'no such work' (a false hallucination flag)."""
+    from app import openalex
+    from app.openalex import OpenAlexLookupError
+    with pytest.raises(OpenAlexLookupError) as ei:
+        openalex._search_works_by_title(_StubClient([_StubResp(400), _StubResp(400)]), "Some title?")
+    assert ei.value.status == 400
+    # One rejected + one genuine empty answer -> a real "no hits".
+    assert openalex._search_works_by_title(
+        _StubClient([_StubResp(400), _StubResp(200, {"results": []})]), "Some title?") == []
+    with pytest.raises(OpenAlexLookupError):
+        openalex._search_works_by_title(_StubClient([]), "???")
+
+
+def test_doi_lookup_error_status_only():
+    from app import openalex
+    from app.openalex import OpenAlexLookupError
+    with pytest.raises(OpenAlexLookupError) as ei:
+        openalex._get_work_by_doi(_StubClient([_StubResp(400)]), "10.1/x")
+    assert ei.value.status == 400 and "http" not in str(ei.value)
+
+
+def test_health_get_and_head():
+    from fastapi.testclient import TestClient
+    from app import main
+    client = TestClient(main.app)
+    r = client.get("/api/health")
+    assert r.status_code == 200
+    assert set(r.json()) == {"status", "api_version", "git_sha", "polite_pool"}
+    assert r.json()["api_version"] == main.API_VERSION
+    assert client.head("/api/health").status_code == 200
+
+
+def test_httpx_logger_is_quiet():
+    import logging
+    import app.main  # noqa: F401  (import side effect)
+    assert logging.getLogger("httpx").level == logging.WARNING

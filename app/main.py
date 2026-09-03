@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -39,6 +41,7 @@ from .llm import LLMClient, LLMError
 from .openalex import OpenAlexAuthError, resolve_reference
 
 app = FastAPI(title="openalexcheck", docs_url=None, redoc_url=None)
+log = logging.getLogger("phantocite.main")
 
 # The /api/verify* endpoints are a public, keyless OpenAlex wrapper meant to be
 # called by external tools (e.g. an EduGenAI extension). No cookies/credentials
@@ -188,6 +191,7 @@ async def _run_stream(*, llm, text, openalex_key, check_hallucination,
         except LLMError as exc:
             emit({"type": "error", "detail": safe(exc)})
         except Exception as exc:  # never leak internals or keys
+            log.exception("analysis pipeline failed")
             emit({"type": "error", "detail": safe(f"Unexpected error during analysis: {exc}")})
         finally:
             emit(None)  # sentinel: worker finished
@@ -409,9 +413,11 @@ def _safe_resolve(ref: dict, key: Optional[str]) -> dict:
         return resolve_reference(ref, api_key=key)
     except OpenAlexAuthError:
         raise
-    except Exception as exc:  # network oddities, unexpected data shapes, etc.
+    except Exception:  # network oddities, unexpected data shapes, etc.
+        log.exception("resolve_reference failed for reference %s", ref.get("id"))
         return {"status": "lookup_failed", "work": None, "candidates": [],
-                "notes": [redact(f"This reference could not be verified: {exc}", key)]}
+                "notes": ["This reference could not be verified (unexpected error while "
+                          "looking it up) — retry before treating it as unverified."]}
 
 
 def _trim_abstract(work: Optional[dict]) -> Optional[dict]:
@@ -619,6 +625,16 @@ async def api_echo(request: Request):
             "failure is in the platform's gateway, not in this API."
         ),
     }
+
+
+@app.api_route("/api/health", methods=["GET", "HEAD"])
+def api_health():
+    """Deploy/monitoring probe: which build is live and whether OpenAlex
+    requests go through the polite pool. HEAD is registered explicitly because
+    FastAPI does not add it to GET routes and uptime monitors default to HEAD."""
+    sha = (os.environ.get("VERCEL_GIT_COMMIT_SHA") or "")[:12] or None
+    return {"status": "ok", "api_version": API_VERSION, "git_sha": sha,
+            "polite_pool": bool(os.environ.get("OPENALEX_MAILTO"))}
 
 
 @app.get("/edugenai")

@@ -5,6 +5,7 @@ No API key is needed for OpenAlex. Set OPENALEX_MAILTO to join the polite pool.
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import string
@@ -14,9 +15,12 @@ from typing import Any, Optional
 
 import httpx
 
-from .keysafety import redact
-
 OPENALEX_BASE = "https://api.openalex.org"
+
+log = logging.getLogger("phantocite.openalex")
+# httpx logs "HTTP Request: GET <full url>" at INFO — for OpenAlex that URL
+# carries the user's Premium key as a query parameter. Never let it reach a log.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 class OpenAlexAuthError(Exception):
     """Raised when OpenAlex rejects the supplied API key."""
@@ -110,12 +114,25 @@ def summarize_work(work: dict) -> dict:
 class OpenAlexLookupError(Exception):
     """A lookup could not be completed (network error or non-auth 4xx/5xx after
     retries). Distinct from 'no results found' — the caller must NOT treat this
-    as a hallucination, since a transient failure is not evidence of absence."""
+    as a hallucination, since a transient failure is not evidence of absence.
+
+    The message is status-only on purpose: httpx exception text embeds the full
+    request URL (api_key included), so it is never copied into a message."""
+
+    def __init__(self, message: str, status: Optional[int] = None):
+        super().__init__(message)
+        self.status = status
 
 
-def _check_auth(resp: httpx.Response) -> None:
+def _check_auth(resp: httpx.Response, key_sent: bool) -> None:
+    """A 401/403 is an API-key rejection ONLY if a key was actually sent. Without
+    a key it is a CDN/abuse-protection/transient refusal — a lookup failure for
+    this reference, never a reason to abort the whole run."""
     if resp.status_code in (401, 403):
-        raise OpenAlexAuthError("OpenAlex rejected the API key. Remove it or check that it is valid.")
+        if key_sent:
+            raise OpenAlexAuthError("OpenAlex rejected the API key. Remove it or check that it is valid.")
+        raise OpenAlexLookupError(f"OpenAlex returned {resp.status_code} (no API key was sent)",
+                                  status=resp.status_code)
 
 
 def _get(client: httpx.Client, path: str, params: Optional[dict] = None,
@@ -125,31 +142,46 @@ def _get(client: httpx.Client, path: str, params: Optional[dict] = None,
     A transient failure here would otherwise masquerade as 'reference not found'
     and produce a false hallucination flag — so we retry, then raise loudly.
     """
-    last_exc: Optional[Exception] = None
+    key_sent = "api_key" in (getattr(client, "params", None) or {})
+    last_status: Optional[int] = None
+    last_error: Optional[str] = None
     for i in range(attempts):
         try:
             resp = client.get(path, params=params)
         except httpx.HTTPError as exc:
-            last_exc = exc
+            last_status, last_error = None, type(exc).__name__
+            log.warning("OpenAlex request failed (%s), attempt %d/%d", last_error, i + 1, attempts)
         else:
-            _check_auth(resp)  # never retry an auth rejection
+            _check_auth(resp, key_sent)  # never retry an auth rejection
             if resp.status_code < 400 or resp.status_code == 404:
                 return resp
             if resp.status_code not in (429,) and resp.status_code < 500:
                 # Non-transient client error (bad query etc.) — don't spin.
                 return resp
-            last_exc = httpx.HTTPStatusError(
-                f"OpenAlex returned {resp.status_code}", request=resp.request, response=resp)
+            last_status, last_error = resp.status_code, None
+            log.warning("OpenAlex returned %d, attempt %d/%d", last_status, i + 1, attempts)
         if i < attempts - 1:
             time.sleep(0.5 * (i + 1))
-    raise OpenAlexLookupError(str(last_exc) if last_exc else "OpenAlex request failed")
+    if last_status is not None:
+        raise OpenAlexLookupError(f"OpenAlex returned {last_status}", status=last_status)
+    raise OpenAlexLookupError(f"OpenAlex could not be reached ({last_error or 'unknown error'})")
+
+
+def _lookup_note(exc: Exception, what: str) -> str:
+    """User-facing note for a failed lookup — status or error class only, never
+    the exception text (which may embed the request URL and the API key)."""
+    status = getattr(exc, "status", None)
+    if status:
+        return f"OpenAlex returned {status} for the {what}."
+    return f"OpenAlex could not be reached for the {what}."
 
 
 def _get_work_by_doi(client: httpx.Client, doi: str) -> Optional[dict]:
     resp = _get(client, f"/works/https://doi.org/{doi}")
     if resp.status_code == 404:
         return None
-    resp.raise_for_status()
+    if resp.status_code >= 400:
+        raise OpenAlexLookupError(f"OpenAlex returned {resp.status_code}", status=resp.status_code)
     return resp.json()
 
 
@@ -170,13 +202,22 @@ def _search_works_by_title(client: httpx.Client, title: str, per_page: int = 6) 
     # Try the apostrophe-preserving query first; fall back to the fully
     # normalized form on ANY failure (error status or zero hits).
     queries = [q for q in dict.fromkeys([_search_query(title), normalize_title(title)]) if q]
+    if not queries:
+        raise OpenAlexLookupError("The title contains no searchable text")
+    errors: list[int] = []
     for q in queries:
         resp = _get(client, "/works", params={"filter": f"title.search:{q}", "per-page": per_page})
         if resp.status_code >= 400:
+            errors.append(resp.status_code)
             continue
         results = resp.json().get("results", [])
         if results:
             return results
+    if len(errors) == len(queries):
+        # Every query was REJECTED — that is "could not search", not "no such
+        # work"; reporting it as not_found would be a false hallucination flag.
+        raise OpenAlexLookupError(f"OpenAlex returned {errors[-1]} for the title search",
+                                  status=errors[-1])
     return []
 
 
@@ -242,7 +283,7 @@ def resolve_reference(ref: dict, api_key: Optional[str] = None) -> dict:
             except (httpx.HTTPError, OpenAlexLookupError) as exc:
                 raw = None
                 lookup_failed = True
-                notes.append(redact(f"OpenAlex DOI lookup failed: {exc}", api_key))
+                notes.append(_lookup_note(exc, "DOI lookup"))
             if raw:
                 doi_work = summarize_work(raw)
                 sim = title_similarity(ref.get("title") or "", doi_work["title"] or "")
@@ -263,7 +304,7 @@ def resolve_reference(ref: dict, api_key: Optional[str] = None) -> dict:
             except (httpx.HTTPError, OpenAlexLookupError) as exc:
                 results = []
                 lookup_failed = True
-                notes.append(redact(f"OpenAlex title search failed: {exc}", api_key))
+                notes.append(_lookup_note(exc, "title search"))
             seen = {c.get("openalex_id") for c in candidates}
             scored = []
             for raw in results:
