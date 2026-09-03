@@ -22,8 +22,10 @@ import json
 import logging
 import os
 import re
+import secrets
 import threading
 import time
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
@@ -32,7 +34,7 @@ from typing import Any, Callable, Optional
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -71,9 +73,87 @@ async def validation_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(status_code=422, content={"detail": errors})
 
 
+# ---------------------------------------------------------------------------
+# Pages: served with a per-request nonce so the Content-Security-Policy can
+# allow ONLY our own inline scripts (and GA's loader) — an injected inline
+# handler such as <img onerror=...> then cannot run even if escaping ever
+# slips, and no script may post the pasted keys anywhere but our own origin
+# and Google Analytics. Styles stay inline (unsafe-inline) — harmless here.
+# ---------------------------------------------------------------------------
+
+_GA_HOSTS = ("https://www.googletagmanager.com https://www.google-analytics.com "
+             "https://*.google-analytics.com https://*.analytics.google.com")
+
+
+def _page(name: str) -> HTMLResponse:
+    nonce = secrets.token_urlsafe(16)
+    html = (STATIC_DIR / name).read_text(encoding="utf-8").replace("<script", f'<script nonce="{nonce}"')
+    csp = ("default-src 'self'; "
+           f"script-src 'nonce-{nonce}' https://www.googletagmanager.com; "
+           "style-src 'self' 'unsafe-inline'; "
+           f"connect-src 'self' {_GA_HOSTS}; "
+           f"img-src 'self' data: {_GA_HOSTS}; "
+           "font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; "
+           "object-src 'none'")
+    return HTMLResponse(html, headers={
+        "Content-Security-Policy": csp,
+        "X-Content-Type-Options": "nosniff",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "Cache-Control": "no-cache",
+    })
+
+
 @app.get("/")
 def index():
-    return FileResponse(STATIC_DIR / "index.html")
+    return _page("index.html")
+
+
+# ---------------------------------------------------------------------------
+# Per-client rate limiting on the keyless API. Best-effort: it is in-process
+# (per instance on a serverless platform), so the durable control is the
+# platform's firewall; this stops the casual loop from burning the deployment's
+# OpenAlex quota. /api/health is exempt (monitors). EduGenAI users share the
+# platform's egress IPs, so the batch limit is deliberately generous.
+# ---------------------------------------------------------------------------
+
+RATE_LIMITS = {"/api/analyze": (6, 60), "/api/verify_batch": (30, 60), "*": (120, 60)}
+
+
+class RateLimiter:
+    def __init__(self, limits: dict, enabled: bool = True):
+        self.limits, self.enabled = limits, enabled
+        self._hits: dict[tuple[str, str], deque] = {}
+
+    def hit(self, ip: str, path: str, now: Optional[float] = None) -> Optional[int]:
+        """Record a request; return seconds to wait if over the limit, else None."""
+        now = time.monotonic() if now is None else now
+        limit, window = self.limits.get(path) or self.limits["*"]
+        if len(self._hits) > 10_000:  # bound memory: drop everything stale
+            self._hits = {k: q for k, q in self._hits.items() if q and now - q[0] < window}
+        q = self._hits.setdefault((ip, path), deque())
+        while q and now - q[0] >= window:
+            q.popleft()
+        if len(q) >= limit:
+            return max(1, int(window - (now - q[0])) + 1)
+        q.append(now)
+        return None
+
+
+_LIMITER = RateLimiter(RATE_LIMITS)
+
+
+@app.middleware("http")
+async def _rate_limit(request: Request, call_next):
+    path = request.url.path
+    if _LIMITER.enabled and path.startswith("/api/") and path != "/api/health":
+        ip = ((request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+              or request.headers.get("x-real-ip")
+              or (request.client.host if request.client else "unknown"))
+        wait = _LIMITER.hit(ip, path)
+        if wait:
+            return JSONResponse(status_code=429, headers={"Retry-After": str(wait)},
+                                content={"detail": f"Too many requests — try again in {wait} s."})
+    return await call_next(request)
 
 
 def _clamp_tokens(value: int) -> int:
@@ -598,7 +678,7 @@ def _run_batch(items: list, key: Optional[str]) -> list[dict]:
 # indistinguishable from a parsing failure on the current one.
 # Deployment marker, returned by the verify endpoints (and /api/echo). BUMP on
 # every deploy so "is production current?" stays answerable from a response.
-API_VERSION = "2026-07-16.10"
+API_VERSION = "2026-09-03.1"
 
 
 def _from_query(request: Request) -> tuple[list, Optional[str]]:
@@ -747,7 +827,7 @@ def api_health():
 
 @app.get("/edugenai")
 def edugenai():
-    return FileResponse(STATIC_DIR / "edugenai.html")
+    return _page("edugenai.html")
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

@@ -1170,3 +1170,51 @@ def test_stream_close_sets_cancel(monkeypatch):
         return main._LAST_CONTROL["control"].cancel.is_set()
 
     assert asyncio.run(go()) is True
+
+
+# ---------------------------------------------------------------------------
+# Commit 10: nonce CSP on pages, per-IP rate limiting
+# ---------------------------------------------------------------------------
+
+def test_pages_send_nonce_csp_matching_their_scripts():
+    import re as _re
+    from fastapi.testclient import TestClient
+    from app import main
+    client = TestClient(main.app)
+    for path in ("/", "/edugenai"):
+        r = client.get(path)
+        assert r.status_code == 200
+        csp = r.headers["content-security-policy"]
+        nonce = _re.search(r"script-src 'nonce-([^']+)'", csp).group(1)
+        assert "'unsafe-inline'" not in csp.split("script-src")[1].split(";")[0]
+        assert "frame-ancestors 'none'" in csp and "googletagmanager.com" in csp
+        scripts = _re.findall(r"<script([^>]*)>", r.text)
+        assert scripts and all(f'nonce="{nonce}"' in s for s in scripts)
+        assert r.headers["x-content-type-options"] == "nosniff"
+    # Nonces are per request.
+    assert client.get("/").headers["content-security-policy"] != client.get("/").headers["content-security-policy"]
+
+
+def test_rate_limiter_returns_429_per_ip(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import main
+    limiter = main.RateLimiter({"/api/verify": (2, 60), "*": (100, 60)}, enabled=True)
+    monkeypatch.setattr(main, "_LIMITER", limiter)
+    monkeypatch.setattr(main, "resolve_reference",
+                        lambda ref, api_key=None, **kw: {"status": "not_found", "work": None, "candidates": [], "notes": []})
+    client = TestClient(main.app)
+    hdr = {"X-Forwarded-For": "203.0.113.5, 10.0.0.1"}
+    assert client.post("/api/verify", json={"title": "A"}, headers=hdr).status_code == 200
+    assert client.post("/api/verify", json={"title": "A"}, headers=hdr).status_code == 200
+    r = client.post("/api/verify", json={"title": "A"}, headers=hdr)
+    assert r.status_code == 429 and int(r.headers["retry-after"]) >= 1
+    assert client.post("/api/verify", json={"title": "A"}, headers={"X-Forwarded-For": "198.51.100.9"}).status_code == 200
+    assert client.get("/api/health", headers=hdr).status_code == 200   # exempt
+
+
+def test_rate_limiter_window_expires():
+    from app import main
+    lim = main.RateLimiter({"*": (2, 10)})
+    assert lim.hit("ip", "/api/x", now=0) is None and lim.hit("ip", "/api/x", now=1) is None
+    assert lim.hit("ip", "/api/x", now=2) == 9
+    assert lim.hit("ip", "/api/x", now=11) is None

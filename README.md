@@ -62,6 +62,27 @@ Then open <http://localhost:8000>.
 Optional: set `OPENALEX_MAILTO=you@example.com` to use OpenAlex's polite pool
 (faster, more reliable rate limits).
 
+## Deploying
+
+Production runs on Vercel (zero-config FastAPI, entry point `app/main.py`),
+auto-deployed from `main`. Things the repo cannot set for you:
+
+- **Environment variables** (Vercel → Settings → Environment Variables):
+  `OPENALEX_MAILTO` — required in production (polite pool; the app logs a
+  warning without it). Optional tuning: `ANALYSIS_BUDGET_S` (wall-clock budget
+  per analysis, default 270; the run stops starting new work and reports
+  `incomplete` in its final event), `OPENALEX_RPS` (request pacing, default 8),
+  `RESOLVE_WORKERS` (parallel lookups per analysis, default 4),
+  `LLM_READ_TIMEOUT_CAP_S` (OpenAI/Gemini read-timeout cap, default 280).
+- **Function max duration** (Vercel → Settings → Functions): set it above
+  `ANALYSIS_BUDGET_S` + 30 s so the app's own budget always wins over the
+  platform kill (which ends the stream silently).
+- **Rate limiting**: the app throttles `/api/*` per client IP in-process
+  (best-effort per instance); add a Vercel Firewall rate-limit rule for a
+  durable control.
+- **After a deploy**: `GET /api/health` shows the live `api_version` and git
+  sha; bump `API_VERSION` in `app/main.py` with every deployed change.
+
 ## Providers and default models
 
 | Provider dropdown | Default model      | Key type            |
