@@ -254,6 +254,10 @@ def _lookup_note(exc: Exception, what: str) -> str:
     status = getattr(exc, "status", None)
     if status:
         return f"OpenAlex returned {status} for the {what}."
+    if "searchable" in str(exc):
+        return "The title contains no searchable text, so OpenAlex could not be queried."
+    if "cancelled" in str(exc):
+        return f"The {what} was cancelled before it completed."
     return f"OpenAlex could not be reached for the {what}."
 
 

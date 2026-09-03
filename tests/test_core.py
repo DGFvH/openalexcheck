@@ -1218,3 +1218,10 @@ def test_rate_limiter_window_expires():
     assert lim.hit("ip", "/api/x", now=0) is None and lim.hit("ip", "/api/x", now=1) is None
     assert lim.hit("ip", "/api/x", now=2) == 9
     assert lim.hit("ip", "/api/x", now=11) is None
+
+
+def test_unsearchable_title_note_is_accurate(monkeypatch):
+    from app import openalex
+    monkeypatch.setattr(openalex, "_client", lambda key=None: _StubClient([]))
+    res = openalex.resolve_reference({"title": "???", "year": 2020})
+    assert res["status"] == "lookup_failed" and "no searchable text" in " ".join(res["notes"])
