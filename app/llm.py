@@ -40,6 +40,11 @@ class LLMClient:
         self._api_key = api_key.strip()
         self.model = (model or "").strip() or DEFAULT_MODELS[provider]
 
+    def redact(self, text: str) -> str:
+        """Strip this client's key from a message before it leaves the server."""
+        from .keysafety import redact
+        return redact(text, self._api_key)
+
     def complete_json(self, system: str, user: str, max_tokens: int = 8000,
                       thinking: bool = True) -> dict:
         """Run one completion and parse the response as a JSON object.

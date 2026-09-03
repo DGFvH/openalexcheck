@@ -920,3 +920,72 @@ def test_post_json_timeout_scales_and_is_named(monkeypatch):
     monkeypatch.setattr(llm.httpx, "post", down)
     with pytest.raises(llm.LLMError, match="Could not reach"):
         llm._post_json("https://x", {}, {}, "Gemini")
+
+
+# ---------------------------------------------------------------------------
+# Commit 6: compare_contexts is a resilient generator
+# ---------------------------------------------------------------------------
+
+class _CompareLLM:
+    """Scripted LLM: `fail_calls` is the set of call numbers that raise."""
+
+    def __init__(self, fail_calls=()):
+        self.calls = 0
+        self.fail_calls = set(fail_calls)
+        self._api_key = "sk-secret"
+
+    def redact(self, text):
+        return text.replace(self._api_key, "•••")
+
+    def complete_json(self, system, user, max_tokens=0, thinking=True):
+        import json as _j
+        self.calls += 1
+        if self.calls in self.fail_calls:
+            raise LLMError(f"overloaded (key sk-secret) call {self.calls}")
+        # Echo a 'match' verdict for every id in the batch.
+        ids = [it["id"] for it in _j.loads(user.split("ITEMS:", 1)[1])]
+        return {"results": [{"id": i, "verdict": "match", "explanation": "ok"} for i in ids]}
+
+
+def _compare_items(n):
+    return [{"id": i, "title": f"T{i}", "abstract": "An abstract.", "contexts": ["ctx"]}
+            for i in range(1, n + 1)]
+
+
+def test_compare_contexts_survives_a_failed_batch():
+    from app.analysis import compare_contexts
+    llm = _CompareLLM(fail_calls={2, 3})          # batch 2 fails twice (call + retry)
+    out = list(compare_contexts(llm, _compare_items(10)))
+    assert llm.calls == 3
+    assert [o["verdict"] for o in out[:8]] == ["match"] * 8
+    assert [o["verdict"] for o in out[8:]] == ["unclear", "unclear"]
+    assert "sk-secret" not in out[9]["explanation"] and "failed" in out[9]["explanation"]
+
+
+def test_compare_contexts_retries_once_then_succeeds():
+    from app.analysis import compare_contexts
+    llm = _CompareLLM(fail_calls={2})
+    out = list(compare_contexts(llm, _compare_items(10)))
+    assert llm.calls == 3 and all(o["verdict"] == "match" for o in out)
+
+
+def test_compare_contexts_strict_raises_and_cancel_stops():
+    import threading
+    from app.analysis import compare_contexts
+    with pytest.raises(LLMError):
+        list(compare_contexts(_CompareLLM(fail_calls={1, 2}), _compare_items(2), strict=True))
+    cancel = threading.Event()
+    llm = _CompareLLM()
+    gen = compare_contexts(llm, _compare_items(10), cancel=cancel)
+    first = [next(gen) for _ in range(8)]
+    cancel.set()
+    assert list(gen) == [] and len(first) == 8 and llm.calls == 1
+
+
+def test_compare_contexts_shortcuts_without_abstract_or_context():
+    from app.analysis import compare_contexts
+    llm = _CompareLLM()
+    items = [{"id": 1, "title": "A", "abstract": "", "contexts": ["c"]},
+             {"id": 2, "title": "B", "abstract": "abs", "contexts": []}]
+    out = list(compare_contexts(llm, items))
+    assert [o["verdict"] for o in out] == ["unclear", "unclear"] and llm.calls == 0

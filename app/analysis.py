@@ -3,10 +3,15 @@ OpenAlex, and compare citation contexts to abstracts (misquote check)."""
 
 from __future__ import annotations
 
-from typing import Optional
+import json
+import logging
+import threading
+from typing import Iterator, Optional
 
 from .llm import LLMClient, LLMError
 from .openalex import resolve_reference
+
+log = logging.getLogger("phantocite.analysis")
 
 MAX_CONTEXTS_PER_REF = 3
 MAX_ABSTRACT_CHARS = 2500
@@ -169,23 +174,29 @@ def verify_references(refs: list[dict], openalex_key: Optional[str] = None) -> l
     return results
 
 
-def compare_contexts(llm: LLMClient, items: list[dict], max_tokens: int = 8000) -> list[dict]:
+def compare_contexts(llm: LLMClient, items: list[dict], max_tokens: int = 8000, *,
+                     cancel: Optional[threading.Event] = None,
+                     strict: bool = False) -> Iterator[dict]:
     """Misquote check. Each item: {id, title, abstract, contexts}.
 
-    Returns [{id, verdict, explanation, paper_topic, student_usage}].
+    Yields {id, verdict, explanation, paper_topic, student_usage} per item, as
+    each batch of COMPARE_BATCH_SIZE completes — so verdicts already obtained
+    are never lost when a later batch fails. A failed batch is retried once;
+    if it fails again its items get an 'unclear' verdict carrying the (redacted)
+    error, unless `strict` (used by /api/compare, which reports the error).
+    Stops early when `cancel` is set.
     """
-    out: list[dict] = []
     payload_items = []
     for item in items:
         abstract = (item.get("abstract") or "")[:MAX_ABSTRACT_CHARS]
         contexts = item.get("contexts") or []
         if not abstract:
-            out.append({"id": item["id"], "verdict": "unclear",
-                        "explanation": "OpenAlex has no abstract for this work, so the usage could not be compared."})
+            yield {"id": item["id"], "verdict": "unclear",
+                   "explanation": "OpenAlex has no abstract for this work, so the usage could not be compared."}
             continue
         if not contexts:
-            out.append({"id": item["id"], "verdict": "unclear",
-                        "explanation": "This reference is never cited in the body text, so there is nothing to compare."})
+            yield {"id": item["id"], "verdict": "unclear",
+                   "explanation": "This reference is never cited in the body text, so there is nothing to compare."}
             continue
         payload_items.append({
             "id": item["id"],
@@ -194,29 +205,42 @@ def compare_contexts(llm: LLMClient, items: list[dict], max_tokens: int = 8000) 
             "citation_contexts": contexts,
         })
 
-    import json as _json
     for start in range(0, len(payload_items), COMPARE_BATCH_SIZE):
+        if cancel is not None and cancel.is_set():
+            return
         batch = payload_items[start:start + COMPARE_BATCH_SIZE]
-        prompt = COMPARE_PROMPT.replace("{ITEMS}", _json.dumps(batch, ensure_ascii=False, indent=1))
-        data = llm.complete_json(COMPARE_SYSTEM, prompt, max_tokens=max_tokens)
+        prompt = COMPARE_PROMPT.replace("{ITEMS}", json.dumps(batch, ensure_ascii=False, indent=1))
+        data = None
+        for attempt in (1, 2):
+            try:
+                data = llm.complete_json(COMPARE_SYSTEM, prompt, max_tokens=max_tokens)
+                break
+            except LLMError as exc:
+                log.warning("misquote batch failed (attempt %d): %s", attempt, llm.redact(str(exc)))
+                if strict or (cancel is not None and cancel.is_set()):
+                    raise
+                error = llm.redact(str(exc))
+        if data is None:
+            for item in batch:
+                yield {"id": item["id"], "verdict": "unclear",
+                       "explanation": f"The misquote check failed for this batch of references: {error}"}
+            continue
         results = data.get("results") or []
         got = {r.get("id"): r for r in results if isinstance(r, dict)}
         for item in batch:
             r = got.get(item["id"])
             if r and r.get("verdict") in ("match", "likely_mismatch", "mismatch", "unclear"):
-                out.append({
+                yield {
                     "id": item["id"],
                     "verdict": r["verdict"],
                     "explanation": r.get("explanation") or "",
                     "paper_topic": r.get("paper_topic"),
                     "student_usage": r.get("student_usage"),
                     "abstract_summary": r.get("abstract_summary"),
-                })
+                }
             else:
-                out.append({"id": item["id"], "verdict": "unclear",
-                            "explanation": "The model did not return a judgement for this reference."})
-    return out
-
+                yield {"id": item["id"], "verdict": "unclear",
+                       "explanation": "The model did not return a judgement for this reference."}
 
 def _to_int(value) -> Optional[int]:
     try:

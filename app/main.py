@@ -238,10 +238,10 @@ def compare(req: CompareRequest):
     fuzzy-matches screen after the user picks the correct candidate work."""
     try:
         llm = LLMClient(req.provider, req.api_key, req.model)
-        results = compare_contexts(
+        results = list(compare_contexts(
             llm, [item.model_dump() for item in req.items],
-            max_tokens=_clamp_tokens(req.max_tokens),
-        )
+            max_tokens=_clamp_tokens(req.max_tokens), strict=True,
+        ))
     except LLMError as exc:
         raise HTTPException(502, redact(str(exc), req.api_key))
     return {"results": results}
