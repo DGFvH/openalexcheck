@@ -79,8 +79,14 @@ Both keys (LLM and optional OpenAlex) are strictly one-time use:
 - They arrive in the POST body, are held in memory only for the duration of
   that request, and are discarded. Nothing is written to disk and there is no
   database or cache.
-- Keys never appear in this app's URLs, so they cannot end up in access logs
-  (uvicorn logs method/path/status only; request bodies are never logged).
+- Keys never appear in this app's own URLs, and request bodies are never
+  logged. (Access logs do record query strings — which is why the keys travel
+  in the body or the `X-OpenAlex-Key` header — and the httpx request-line
+  logger, which would print the OpenAlex `api_key` parameter, is silenced.)
+- Google Analytics (gtag.js) is loaded on the two pages and receives anonymous
+  page-view statistics — never document text, keys, or results.
+- `GET /api/health` reports the live build (`api_version`, git sha) and whether
+  OpenAlex requests go through the polite pool (`OPENALEX_MAILTO` set).
 - Every error message that leaves the server passes through a redaction
   helper (`app/keysafety.py`) that strips the key strings. This matters
   because httpx embeds full request URLs — query string included — in its

@@ -989,3 +989,41 @@ def test_compare_contexts_shortcuts_without_abstract_or_context():
              {"id": 2, "title": "B", "abstract": "abs", "contexts": []}]
     out = list(compare_contexts(llm, items))
     assert [o["verdict"] for o in out] == ["unclear", "unclear"] and llm.calls == 0
+
+
+# ---------------------------------------------------------------------------
+# Commit 7: positional ids, echo redaction
+# ---------------------------------------------------------------------------
+
+def test_extract_references_assigns_positional_ids():
+    """Model-supplied ids are untrusted (a paper can prompt-inject them) and
+    were used unescaped as DOM ids; ids are now positional and unique."""
+    from app import analysis
+
+    class FakeLLM:
+        def complete_json(self, *a, **k):
+            return {"references": [
+                {"id": 0, "raw": "a", "title": "A"},
+                {"id": 0, "raw": "b", "title": "B"},
+                {"id": '<img src=x onerror=alert(1)>', "raw": "c", "title": "C"}]}
+
+    refs, _ = analysis.extract_references(FakeLLM(), "text")
+    assert [r["id"] for r in refs] == [1, 2, 3]
+
+
+def test_echo_redacts_keys_in_body_query_and_infra_header_values():
+    from fastapi.testclient import TestClient
+    from app import main
+    client = TestClient(main.app)
+    body = b'{"references":[{"title":"A"}],"openalex_key":"supersecret","message":"HELLO-42","x":"sk-abcdefghijklmnop"}'
+    r = client.post("/api/echo?api_key=qsecret&probe=XYZ", content=body,
+                    headers={"Content-Type": "application/json", "X-Forwarded-For": "1.2.3.4"})
+    text = r.text
+    rec = r.json()["received"]
+    assert "supersecret" not in text and "qsecret" not in text and "sk-abcdefghijklmnop" not in text
+    assert "HELLO-42" in rec["body_first_2000_chars"] and rec["query_params"]["probe"] == "XYZ"
+    assert "x-forwarded-for" in rec["headers"] and "1.2.3.4" not in text
+    # form-encoded body
+    r = client.post("/api/echo", content=b"openalex_key=formsecret&references=%5B%5D",
+                    headers={"Content-Type": "application/x-www-form-urlencoded"})
+    assert "formsecret" not in r.text and "references=" in r.json()["received"]["body_first_2000_chars"]

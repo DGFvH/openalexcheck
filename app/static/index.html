@@ -278,6 +278,7 @@
         <li><strong>OpenAlex</strong> receives only reference <em>titles and DOIs</em> — never the paper's prose, the student's name, or any body text.</li>
         <li><strong>Your chosen LLM</strong> receives the document text (needed to locate the reference list and citing sentences) and, for the misquote check, the citation snippets plus OpenAlex abstracts — nothing more.</li>
         <li>All three providers state that data sent via an <em>API key</em> is <strong>not used to train their models</strong> by default. Since you bring your own key, the request runs under your account's terms.</li>
+        <li><strong>Google Analytics</strong> (gtag.js) is loaded on this page and receives anonymous page-view statistics — never your document, keys, or results.</li>
         <li>This tool stores nothing: no database, no file writes, no logs of your document or keys.</li>
       </ul>
     </details>
@@ -759,6 +760,11 @@ function showError(msg) {
   $("error").classList.remove("hidden");
 }
 
+// Only http(s) links may become hrefs — esc() cannot stop a javascript: URL.
+function safeUrl(u) {
+  const s = String(u ?? "");
+  return /^https?:\/\//i.test(s) ? esc(s) : "#";
+}
 function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, c =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -821,8 +827,8 @@ function refChecks(r) {
 function refSummary(r) {
   const ref = r.reference;
   return `<summary>
-      <span class="badge ${r.status}">${STATUS_LABEL[r.status]}</span>${sevChip(r)}
-      <span class="refno">Ref #${ref.id}</span>
+      <span class="badge ${esc(r.status)}">${STATUS_LABEL[r.status] ?? esc(r.status)}</span>${sevChip(r)}
+      <span class="refno">Ref #${esc(ref.id)}</span>
       <span class="ref-sum-title">${esc(ref.raw || ref.title || "(unlabelled reference)")}</span>
       <span class="ref-checks">${refChecks(r)}</span>
     </summary>`;
@@ -830,8 +836,8 @@ function refSummary(r) {
 
 function refHeader(r) {
   const ref = r.reference;
-  return `<div class="ref-head"><span class="badge ${r.status}">${STATUS_LABEL[r.status]}</span>${sevChip(r)}
-      <span class="refno">Ref #${ref.id}</span></div>
+  return `<div class="ref-head"><span class="badge ${esc(r.status)}">${STATUS_LABEL[r.status] ?? esc(r.status)}</span>${sevChip(r)}
+      <span class="refno">Ref #${esc(ref.id)}</span></div>
     <div class="sect" style="border-top:0;padding-top:.5rem;margin-top:0">
       <h4 class="sect-title">Reference — as printed in the paper</h4>
       <div class="raw">${esc(ref.raw || ref.title || "(unlabelled reference)")}</div>
@@ -849,16 +855,16 @@ function renderFieldCheck(r) {
   const close = fields.filter(f => f.status === "close");
   let head;
   if (mism.length) {
-    head = `<div class="field-note bad">⚠ Mismatch on ${mism.map(f => FIELD_LABEL[f.field] || f.field).join(", ")} — the work exists, but these printed details differ from the OpenAlex record.</div>`;
+    head = `<div class="field-note bad">⚠ Mismatch on ${mism.map(f => FIELD_LABEL[f.field] || esc(f.field)).join(", ")} — the work exists, but these printed details differ from the OpenAlex record.</div>`;
   } else if (close.length) {
-    head = `<div class="field-note ok">✓ Printed details match the OpenAlex record, with ${close.length} minor naming variation${close.length > 1 ? "s" : ""} (${close.map(f => FIELD_LABEL[f.field] || f.field).join(", ")} — see table).</div>`;
+    head = `<div class="field-note ok">✓ Printed details match the OpenAlex record, with ${close.length} minor naming variation${close.length > 1 ? "s" : ""} (${close.map(f => FIELD_LABEL[f.field] || esc(f.field)).join(", ")} — see table).</div>`;
   } else {
     head = `<div class="field-note ok">✓ Title, authors, year, and other printed details match the OpenAlex record.</div>`;
   }
   const rows = fields.map(f => `
     <tr class="${f.status === "mismatch" ? "row-mismatch" : f.status === "close" ? "row-close" : ""}">
-      <td>${FIELD_LABEL[f.field] || f.field}</td>
-      <td class="f-status fs-${f.status}">${FIELD_STATUS_LABEL[f.status] || f.status}</td>
+      <td>${FIELD_LABEL[f.field] || esc(f.field)}</td>
+      <td class="f-status fs-${esc(f.status)}">${FIELD_STATUS_LABEL[f.status] || esc(f.status)}</td>
       <td>${esc(f.reference_value ?? "—")}</td>
       <td>${esc(f.openalex_value ?? "—")}</td>
     </tr>`).join("");
@@ -883,7 +889,7 @@ function renderSourceCheck(r) {
     .map(n => `<div class="note">⚠ ${esc(n)}</div>`).join("");
   let workLine = "";
   if (r.work) {
-    workLine = `<div class="meta">Found in OpenAlex: <a href="${esc(r.work.url)}" target="_blank" rel="noopener">${esc(r.work.title)}</a>
+    workLine = `<div class="meta">Found in OpenAlex: <a href="${safeUrl(r.work.url)}" target="_blank" rel="noopener">${esc(r.work.title)}</a>
       (${esc(r.work.year ?? "?")}) — ${esc((r.work.authors || []).slice(0, 3).join(", "))}${r.work.venue ? " · " + esc(r.work.venue) : ""}</div>`;
   }
   // Plain-language abstract dropdown lives with the source data when the
@@ -907,7 +913,7 @@ function renderResult(r) {
   const ref = r.reference;
   // Auto-collapsed card: the summary bar (badge + both section verdicts) is
   // always visible; the details expand on click.
-  return `<details class="ref" id="ref-${ref.id}">
+  return `<details class="ref" id="ref-${esc(ref.id)}">
     ${refSummary(r)}
     <div class="ref-body">
       <div class="sect" style="border-top:0;padding-top:.7rem;margin-top:0">
@@ -944,7 +950,7 @@ function renderMisquote(r) {
 }
 
 function misquoteBlock(m, contexts, abstract) {
-  let html = `<div class="verdict"><span class="badge ${m.verdict}">${VERDICT_LABEL[m.verdict]}</span> ${esc(m.explanation || "")}</div>`;
+  let html = `<div class="verdict"><span class="badge ${esc(m.verdict)}">${VERDICT_LABEL[m.verdict] ?? esc(m.verdict)}</span> ${esc(m.explanation || "")}</div>`;
   if (m.paper_topic || m.student_usage) {
     html += `<div class="meta" style="margin-top:.35rem">Student cites it as: <strong>${esc(m.student_usage || "?")}</strong> · Paper is actually about: <strong>${esc(m.paper_topic || "?")}</strong></div>`;
   }
@@ -966,14 +972,14 @@ function renderFuzzy(r) {
   const notes = (r.notes || []).map(n => `<div class="note">⚠ ${esc(n)}</div>`).join("");
   const cands = (r.candidates || []).map((c, i) => `
     <div class="cand">
-      <a href="${esc(c.url)}" target="_blank" rel="noopener">${esc(c.title)}</a>
+      <a href="${safeUrl(c.url)}" target="_blank" rel="noopener">${esc(c.title)}</a>
       (${esc(c.year ?? "?")}) — ${esc((c.authors || []).slice(0, 3).join(", "))}${c.venue ? " · " + esc(c.venue) : ""}
       <div class="meta">${esc(c.match_reason || "")}${c.doi ? " · doi:" + esc(c.doi) : ""}</div>
-      ${DATA.checks.misquote ? `<button data-ref="${r.reference.id}" data-cand="${i}">Use this match & run misquote check</button>` : ""}
+      ${DATA.checks.misquote ? `<button data-ref="${esc(r.reference.id)}" data-cand="${i}">Use this match & run misquote check</button>` : ""}
     </div>`).join("");
-  return `<div class="ref static" id="fuzzy-${r.reference.id}">${refHeader(r)}${notes}
+  return `<div class="ref static" id="fuzzy-${esc(r.reference.id)}">${refHeader(r)}${notes}
     <div class="meta" style="margin-top:.5rem"><strong>Candidate works in OpenAlex:</strong></div>${cands}
-    <div id="fuzzy-mq-${r.reference.id}"></div>
+    <div id="fuzzy-mq-${esc(r.reference.id)}"></div>
   </div>`;
 }
 
@@ -982,8 +988,9 @@ function attachFuzzyHandlers() {
     btn.addEventListener("click", async () => {
       const refId = Number(btn.dataset.ref);
       const candIdx = Number(btn.dataset.cand);
-      const r = DATA.results.find(x => x.reference.id === refId);
-      const cand = r.candidates[candIdx];
+      const r = DATA.results.find(x => String(x.reference.id) === btn.dataset.ref);
+      const cand = r && r.candidates ? r.candidates[candIdx] : null;
+      if (!r || !cand) return;
       btn.disabled = true; btn.textContent = "Comparing…";
       try {
         const resp = await fetch("/api/compare", {
@@ -1058,7 +1065,14 @@ function downloadResults(fmt) {
   const cols = Object.keys(rows[0]);
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
   if (fmt === "csv") {
-    const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    // Spreadsheets evaluate a cell starting with = + - @ (or a tab/CR) even
+    // inside quotes; the cells carry text copied from the student's document,
+    // so neutralise formula injection with a leading apostrophe.
+    const q = v => {
+      const s = String(v ?? "");
+      const guarded = /^[=+\-@\t\r]/.test(s) ? "'" + s : s;
+      return `"${guarded.replace(/"/g, '""')}"`;
+    };
     const csv = "﻿" + [cols.map(q).join(","),
       ...rows.map(r => cols.map(c => q(r[c])).join(","))].join("\r\n");
     saveBlob(csv, `citation-check-${stamp}.csv`, "text/csv");

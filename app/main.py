@@ -603,6 +603,23 @@ async def api_verify_batch(request: Request, x_openalex_key: Optional[str] = Hea
     return resp
 
 
+_SENSITIVE_NAME = re.compile(r"key|token|secret|auth|password|cookie", re.I)
+_KEY_SHAPED = re.compile(r"\b(?:sk-[A-Za-z0-9_\-]{8,}|AIza[0-9A-Za-z_\-]{20,})\b")
+_INFRA_HEADER_PREFIXES = ("x-forwarded", "x-vercel", "x-real-ip", "forwarded", "cf-", "via",
+                          "x-request-id", "traceparent")
+_JSON_FIELD = re.compile(r'("[^"]*(?:key|token|secret|auth|password|cookie)[^"]*"\s*:\s*")([^"\\]*)(")', re.I)
+_FORM_FIELD = re.compile(r"((?:^|[&?])[^=&]*(?:key|token|secret|auth|password)[^=&]*=)([^&]*)", re.I)
+
+
+def _redact_transport(text: str) -> str:
+    """Blank the VALUE of any key-like field in a raw body/query string (JSON
+    or form-encoded), plus anything shaped like a provider key, so the echo
+    endpoint can mirror a request without mirroring a credential."""
+    text = _JSON_FIELD.sub(lambda m: m.group(1) + "•••redacted•••" + m.group(3), text)
+    text = _FORM_FIELD.sub(lambda m: m.group(1) + "•••redacted•••", text)
+    return _KEY_SHAPED.sub("•••redacted•••", text)
+
+
 @app.get("/api/echo")
 @app.post("/api/echo")
 async def api_echo(request: Request):
@@ -616,9 +633,14 @@ async def api_echo(request: Request):
     raw = (await request.body()).decode("utf-8", "replace")
 
     def safe_val(k: str, v: str) -> str:
-        sensitive = ("key", "token", "auth", "secret", "cookie")
-        return "•••redacted•••" if any(s in k.lower() for s in sensitive) else v
+        if _SENSITIVE_NAME.search(k):
+            return "•••redacted•••"
+        if any(k.lower().startswith(p) for p in _INFRA_HEADER_PREFIXES):
+            return "•••omitted•••"          # names kept, infrastructure values dropped
+        return _KEY_SHAPED.sub("•••redacted•••", v)
 
+    # Redact BEFORE capping: a key must never survive because it straddled the cut.
+    body = _redact_transport(raw[:65536])
     return {
         "api_version": API_VERSION,
         "received": {
@@ -628,7 +650,7 @@ async def api_echo(request: Request):
             "content_length": request.headers.get("content-length"),
             "query_params": {k: safe_val(k, v) for k, v in request.query_params.items()},
             "headers": {k: safe_val(k, v) for k, v in request.headers.items()},
-            "body_first_2000_chars": raw[:2000],
+            "body_first_2000_chars": body[:2000],
             "body_total_chars": len(raw),
         },
         "how_to_read_this": (

@@ -148,7 +148,10 @@ def extract_references(llm: LLMClient, text: str, max_tokens: int = 16000) -> tu
             continue
         contexts = [c for c in (ref.get("contexts") or []) if isinstance(c, str) and c.strip()]
         cleaned.append({
-            "id": ref.get("id") or (i + 1),
+            # Positional, never the model's value: the id is the join key for
+            # misquote verdicts and the browser's card map, and model output is
+            # untrusted (a paper can prompt-inject it).
+            "id": i + 1,
             "raw": (ref.get("raw") or "").strip(),
             "title": (ref.get("title") or None),
             "first_author_surname": ref.get("first_author_surname"),
