@@ -1053,8 +1053,9 @@ def _stream_events(client, monkeypatch, refs, resolve=None, compare=None, budget
             for it in items:
                 yield {"id": it["id"], "verdict": "match", "explanation": "ok"}
     monkeypatch.setattr(main, "compare_contexts", compare)
-    data = {"provider": "openai", "api_key": "sk-test", "check_hallucination": "true",
-            "check_misquote": "true"}
+    from conftest import login
+    login(client)
+    data = {"check_hallucination": "true", "check_misquote": "true"}
     with client.stream("POST", "/api/analyze", files={"file": (filename, b"%PDF-1.4 x")}, data=data) as r:
         assert r.status_code == 200
         return [json.loads(l) for l in r.iter_lines() if l.strip()]
@@ -1067,21 +1068,22 @@ def _refs(n):
             for i in range(1, n + 1)]
 
 
-def test_analyze_extraction_error_is_a_stream_event_not_http_400():
+def test_analyze_extraction_error_is_a_stream_event_not_http_400(monkeypatch):
+    from conftest import login
     from fastapi.testclient import TestClient
     from app import main
-    client = TestClient(main.app)
-    data = {"provider": "openai", "api_key": "sk-test", "check_hallucination": "true"}
+    client = login(TestClient(main.app))
+    data = {"check_hallucination": "true"}
     with client.stream("POST", "/api/analyze", files={"file": ("paper.txt", b"hello")}, data=data) as r:
         assert r.status_code == 200
         events = [json.loads(l) for l in r.iter_lines() if l.strip()]
     kinds = [e["type"] for e in events]
     assert kinds[0] == "ready" and "error" in kinds
     assert "Unsupported file type" in next(e for e in events if e["type"] == "error")["detail"]
-    # Provider/key validation is still a plain HTTP 400.
-    r = client.post("/api/analyze", files={"file": ("p.pdf", b"x")},
-                    data={"provider": "nope", "api_key": "k", "check_hallucination": "true"})
-    assert r.status_code == 400
+    # Server-side LLM configuration problems are plain HTTP 503s.
+    monkeypatch.delenv("LLM_API_KEY")
+    r = client.post("/api/analyze", files={"file": ("p.pdf", b"x")}, data=data)
+    assert r.status_code == 503 and "LLM_API_KEY" in r.json()["detail"]
 
 
 def test_analyze_results_stay_ordered_with_parallel_lookups(monkeypatch):
@@ -1178,9 +1180,10 @@ def test_stream_close_sets_cancel(monkeypatch):
 
 def test_pages_send_nonce_csp_matching_their_scripts():
     import re as _re
+    from conftest import login
     from fastapi.testclient import TestClient
     from app import main
-    client = TestClient(main.app)
+    client = login(TestClient(main.app))
     for path in ("/", "/edugenai"):
         r = client.get(path)
         assert r.status_code == 200
@@ -1225,3 +1228,86 @@ def test_unsearchable_title_note_is_accurate(monkeypatch):
     monkeypatch.setattr(openalex, "_client", lambda key=None: _StubClient([]))
     res = openalex.resolve_reference({"title": "???", "year": 2020})
     assert res["status"] == "lookup_failed" and "no searchable text" in " ".join(res["notes"])
+
+
+# ---------------------------------------------------------------------------
+# Temporary password gate + server-side LLM key
+# ---------------------------------------------------------------------------
+
+def test_gate_off_pages_open_but_key_endpoints_fail_closed(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import main
+    monkeypatch.delenv("SITE_PASSWORD")
+    client = TestClient(main.app)
+    assert client.get("/").status_code == 200
+    assert client.get("/login", follow_redirects=False).status_code == 302   # nothing to log into
+    r = client.post("/api/analyze", files={"file": ("p.pdf", b"x")}, data={"check_hallucination": "true"})
+    assert r.status_code == 503 and "SITE_PASSWORD" in r.json()["detail"]
+    r = client.post("/api/compare", json={"items": []})
+    assert r.status_code == 503
+
+
+def test_gate_on_blocks_pages_and_key_endpoints_only():
+    from fastapi.testclient import TestClient
+    from app import main
+    client = TestClient(main.app)
+    r = client.get("/", follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"] == "/login?next=/"
+    assert client.get("/edugenai", follow_redirects=False).status_code == 302
+    r = client.post("/api/analyze", files={"file": ("p.pdf", b"x")}, data={"check_hallucination": "true"})
+    assert r.status_code == 401 and "Password" in r.json()["detail"]
+    assert client.post("/api/compare", json={"items": []}).status_code == 401
+    # Keyless extension endpoints, health and static assets stay open.
+    assert client.get("/api/health").status_code == 200
+    assert client.post("/api/verify_batch", json={"references": []}).status_code == 200
+    assert client.post("/api/echo", json={"m": 1}).status_code == 200
+    assert client.get("/static/favicon.svg").status_code == 200
+
+
+def test_login_flow_sets_cookie_and_rejects_wrong_password():
+    from conftest import login
+    from fastapi.testclient import TestClient
+    from app import main, auth
+    client = TestClient(main.app)
+    page = client.get("/login?next=/edugenai")
+    assert page.status_code == 200 and "script-src 'none'" in page.headers["content-security-policy"]
+    r = client.post("/login", data={"password": "nope", "next": "/"}, follow_redirects=False)
+    assert r.status_code == 401 and "Wrong password" in r.text and auth.COOKIE not in r.cookies
+    r = client.post("/login", data={"password": "test-pw", "next": "//evil.example/x"}, follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/"          # off-site next rejected
+    assert auth.COOKIE in r.cookies
+    assert client.get("/").status_code == 200                              # cookie kept by the client
+    assert '<body data-provider="openai" data-gated="1">' in client.get("/").text
+    r = client.post("/logout", follow_redirects=False)
+    assert r.status_code == 303
+    assert client.get("/", follow_redirects=False).status_code == 302
+    login(client)
+    assert client.get("/").status_code == 200
+
+
+def test_compare_uses_server_key(monkeypatch):
+    from conftest import login
+    from fastapi.testclient import TestClient
+    from app import main
+    seen = {}
+
+    def fake_compare(llm, items, max_tokens=0, **kw):
+        seen["provider"], seen["key"] = llm.provider, llm._api_key
+        return iter([{"id": 1, "verdict": "match", "explanation": "ok"}])
+
+    monkeypatch.setattr(main, "compare_contexts", fake_compare)
+    client = login(TestClient(main.app))
+    r = client.post("/api/compare", json={"items": [{"id": 1, "title": "T", "abstract": "a", "contexts": ["c"]}],
+                                           "provider": "gemini", "api_key": "sk-client"})   # ignored
+    assert r.status_code == 200 and seen == {"provider": "openai", "key": "sk-test"}
+
+
+def test_login_is_rate_limited(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import main
+    monkeypatch.setattr(main, "_LIMITER", main.RateLimiter({"/login": (2, 60), "*": (100, 60)}, enabled=True))
+    client = TestClient(main.app)
+    for _ in range(2):
+        assert client.post("/login", data={"password": "x"}, follow_redirects=False).status_code == 401
+    assert client.post("/login", data={"password": "x"}, follow_redirects=False).status_code == 429
+    assert client.get("/login").status_code == 200   # GET is not counted

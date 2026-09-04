@@ -198,9 +198,11 @@
   .progress-log div.tick::before { content: "✓ "; color: var(--ok); }
   .hidden { display: none; }
   a { color: var(--accent); }
+  body:not([data-gated="1"]) .gated-only { display: none; }
+  .linkbtn { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font: inherit; }
 </style>
 </head>
-<body>
+<body data-provider="{{LLM_PROVIDER}}" data-gated="{{GATED}}">
 <header>
   <div class="header-top">
     <h1>Citation Checker <em>· OpenAlex</em></h1>
@@ -226,7 +228,8 @@
       </span>
     </div>
   </div>
-  <p class="sub">Upload a student paper. References are checked with OpenAlex, citation contexts are compared with abstracts using your LLM API key.</p>
+  <p class="sub">Upload a student paper. References are checked with OpenAlex, citation contexts are compared with abstracts using an LLM.</p>
+  <p class="sub gated-only">This instance runs on the site owner's API key and is password-protected (temporary). <form method="post" action="/logout" style="display:inline"><button class="linkbtn" type="submit">Log out</button></form></p>
   <p class="sub">Using EduGenAI? Follow <a href="/edugenai">these instructions</a>. Using another tool? Contact me via the links above, I will add instructions.</p>
   <p class="sub">Always confirm that your institution's privacy policy permits this use. The tool checks abstracts only and may produce false positives or negatives. It is a diagnostic. Verify results manually.</p>
 </header>
@@ -236,17 +239,8 @@
     <input type="file" id="file" accept=".pdf,.docx">
     <div class="row">
       <div>
-        <label>LLM provider</label>
-        <select id="provider">
-          <option value="anthropic">Claude (Anthropic)</option>
-          <option value="gemini">Gemini (Google)</option>
-          <option value="openai">ChatGPT (OpenAI)</option>
-        </select>
-      </div>
-      <div>
-        <label>Your LLM API key (one-time use)</label>
-        <input type="password" id="api_key" autocomplete="new-password" spellcheck="false" placeholder="sk-...">
-        <div class="keynote">Used only for this analysis, sent directly to the provider, never stored or logged.</div>
+        <label>LLM</label>
+        <div class="keynote" id="llm-note">Runs on the site owner's <span id="provider-name"></span> API key (configured on the server) — no key to paste.</div>
       </div>
       <div>
         <label>Model</label>
@@ -276,7 +270,7 @@
       <summary>What data leaves your machine?</summary>
       <ul>
         <li><strong>OpenAlex</strong> receives only reference <em>titles and DOIs</em> — never the paper's prose, the student's name, or any body text.</li>
-        <li><strong>Your chosen LLM</strong> receives the document text (needed to locate the reference list and citing sentences) and, for the misquote check, the citation snippets plus OpenAlex abstracts — nothing more.</li>
+        <li><strong>The configured LLM provider</strong> (<span class="provider-name-copy"></span>) receives the document text (needed to locate the reference list and citing sentences) and, for the misquote check, the citation snippets plus OpenAlex abstracts — nothing more. Requests run under the site owner's API key.</li>
         <li>All three providers state that data sent via an <em>API key</em> is <strong>not used to train their models</strong> by default. Since you bring your own key, the request runs under your account's terms.</li>
         <li><strong>Google Analytics</strong> (gtag.js) is loaded on this page and receives anonymous page-view statistics — never your document, keys, or results.</li>
         <li>This tool stores nothing: no database, no file writes, no logs of your document or keys.</li>
@@ -339,10 +333,14 @@ const MODELS = {
   ],
 };
 
+const PROVIDER_NAME = { anthropic: "Claude (Anthropic)", gemini: "Gemini (Google)", openai: "ChatGPT (OpenAI)" };
+
 function populateModels() {
-  const provider = $("provider").value;
+  const provider = document.body.dataset.provider || "anthropic";
+  $("provider-name").textContent = PROVIDER_NAME[provider] || provider;
+  document.querySelectorAll(".provider-name-copy").forEach(el => el.textContent = PROVIDER_NAME[provider] || provider);
   const sel = $("model_select");
-  sel.innerHTML = MODELS[provider].map(([v, label]) => `<option value="${v}">${label}</option>`).join("")
+  sel.innerHTML = (MODELS[provider] || MODELS.anthropic).map(([v, label]) => `<option value="${v}">${label}</option>`).join("")
     + `<option value="__custom__">Custom…</option>`;
   onModelChange();
 }
@@ -365,7 +363,6 @@ const VERDICT_LABEL = { match: "Consistent", likely_mismatch: "Likely mismatch",
 $("run").addEventListener("click", runAnalysis);
 $("stop").addEventListener("click", stopAnalysis);
 $("sample").addEventListener("click", showSample);
-$("provider").addEventListener("change", populateModels);
 $("model_select").addEventListener("change", onModelChange);
 $("tab-results").addEventListener("click", () => switchTab("results"));
 $("tab-fuzzy").addEventListener("click", () => switchTab("fuzzy"));
@@ -528,17 +525,13 @@ function showSample() {
 
 async function runAnalysis() {
   const file = $("file").files[0];
-  const key = $("api_key").value.trim();
   $("error").classList.add("hidden");
   if (!file) return showError("Please choose a PDF or DOCX file.");
-  if (!key) return showError("Please paste your API key (it is used once and not stored).");
   const wantHall = $("check_hallucination").checked, wantMis = $("check_misquote").checked;
   if (!wantHall && !wantMis) return showError("Tick at least one of the two checks.");
 
   const fd = new FormData();
   fd.append("file", file);
-  fd.append("provider", $("provider").value);
-  fd.append("api_key", key);
   fd.append("model", selectedModel());
   fd.append("openalex_key", $("openalex_key").value.trim());
   fd.append("max_tokens", $("max_tokens").value || "16000");
@@ -1057,8 +1050,6 @@ function attachFuzzyHandlers() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            provider: $("provider").value,
-            api_key: $("api_key").value.trim(),
             model: selectedModel(),
             max_tokens: Number($("max_tokens").value) || 16000,
             items: [{ id: refId, title: cand.title, abstract: cand.abstract, contexts: r.reference.contexts }],

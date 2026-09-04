@@ -76,10 +76,18 @@ def _install(monkeypatch, refs, orphans=(), resolve=None, compare=None):
     monkeypatch.setattr(main, "compare_contexts", compare)
 
 
+def _login(page, base_url, password="test-pw"):
+    page.goto(base_url + "/login", wait_until="domcontentloaded")
+    page.fill("input[name=password]", password)
+    page.click("button[type=submit]")
+    page.wait_for_url(base_url + "/")
+
+
 def _run(page, base_url):
     page.goto(base_url + "/", wait_until="networkidle")
+    if page.url.endswith("/login?next=/"):
+        _login(page, base_url)
     page.set_input_files("#file", {"name": "paper.pdf", "mimeType": "application/pdf", "buffer": b"%PDF-1.4 x"})
-    page.fill("#api_key", "sk-test")
     page.click("#run")
     page.wait_for_function("() => ['Done.','Stopped — partial results.','Failed.'].includes(document.getElementById('progress-status').textContent) || !document.getElementById('run').classList.contains('hidden')", timeout=15000)
 
@@ -155,4 +163,21 @@ def test_csv_export_guards_formula_cells(browser, base_url, monkeypatch):
         page.click("#downloads button[data-fmt=csv]")
     text = open(dl.value.path(), encoding="utf-8-sig").read()
     assert "\"'=HYPERLINK" in text and '"=HYPERLINK' not in text
+    page.close()
+
+
+def test_password_gate_in_browser(browser, base_url):
+    page = browser.new_page()
+    page.goto(base_url + "/", wait_until="domcontentloaded")
+    assert page.url.endswith("/login?next=/")
+    page.fill("input[name=password]", "wrong")
+    page.click("button[type=submit]")
+    page.wait_for_selector(".err")
+    _login(page, base_url)
+    assert page.locator("#llm-note").inner_text().startswith("Runs on the site owner's ChatGPT")
+    assert page.locator("#api_key").count() == 0 and page.locator("#provider").count() == 0
+    assert page.is_visible("text=Log out")
+    page.click("#sample")
+    page.wait_for_timeout(500)
+    assert page.evaluate("document.querySelectorAll('#screen-results .ref').length") == 5
     page.close()

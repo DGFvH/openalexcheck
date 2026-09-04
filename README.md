@@ -4,10 +4,14 @@
 
 A small web tool for checking the references in a student paper.
 
-You upload a **PDF or DOCX** and paste **your own LLM API key** (Claude,
-ChatGPT, or Gemini) — the key is used for this one analysis only, sent
-directly to the provider, and **never stored or logged**. Two checks can be
-ticked:
+> **Temporary mode (current `main`).** The site runs on the owner's LLM key
+> (`LLM_API_KEY` / `LLM_PROVIDER` in the server environment) and is behind a
+> simple password (`SITE_PASSWORD`); the form has no key field. The original
+> bring-your-own-key version is preserved on the `byok-public` branch. The
+> keyless EduGenAI endpoints (`/api/verify*`, `/api/echo`) are not gated.
+
+You upload a **PDF or DOCX**; the analysis runs on the configured LLM (Claude,
+ChatGPT, or Gemini). Two checks can be ticked:
 
 1. **Hallucination check** — every entry in the reference list is looked up in
    [OpenAlex](https://openalex.org) (by DOI when present, otherwise by fuzzy
@@ -68,6 +72,9 @@ Production runs on Vercel (zero-config FastAPI, entry point `app/main.py`),
 auto-deployed from `main`. Things the repo cannot set for you:
 
 - **Environment variables** (Vercel → Settings → Environment Variables):
+  `SITE_PASSWORD` (the temporary gate; without it the key-spending endpoints
+  refuse to run), `LLM_API_KEY` (the owner's provider key), `LLM_PROVIDER`
+  (`anthropic` default, or `openai` / `gemini`), and
   `OPENALEX_MAILTO` — required in production (polite pool; the app logs a
   warning without it). Optional tuning: `ANALYSIS_BUDGET_S` (wall-clock budget
   per analysis, default 270; the run stops starting new work and reports

@@ -34,10 +34,11 @@ from typing import Any, Callable, Optional
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import auth
 from .analysis import compare_contexts, extract_references
 from .extract import ExtractionError, extract_text
 from .keysafety import redact
@@ -85,9 +86,33 @@ _GA_HOSTS = ("https://www.googletagmanager.com https://www.google-analytics.com 
              "https://*.google-analytics.com https://*.analytics.google.com")
 
 
+def _llm_config() -> tuple[str, str]:
+    """TEMPORARY: the LLM runs on the site owner's key from the environment
+    (LLM_PROVIDER / LLM_API_KEY) instead of a key pasted per run."""
+    return os.environ.get("LLM_PROVIDER", "anthropic").strip().lower(), os.environ.get("LLM_API_KEY", "").strip()
+
+
+def _server_llm(model: str) -> LLMClient:
+    provider, key = _llm_config()
+    if not key:
+        raise HTTPException(503, "LLM_API_KEY is not configured on the server.")
+    if not auth.gate_enabled():
+        # Fail closed: never spend the owner's key on an unprotected site.
+        raise HTTPException(503, "SITE_PASSWORD is not configured — refusing to use the server's "
+                                 "API key on an open site.")
+    try:
+        return LLMClient(provider, key, model)
+    except LLMError as exc:
+        raise HTTPException(503, redact(f"Server LLM configuration error: {exc}", key))
+
+
 def _page(name: str) -> HTMLResponse:
     nonce = secrets.token_urlsafe(16)
-    html = (STATIC_DIR / name).read_text(encoding="utf-8").replace("<script", f'<script nonce="{nonce}"')
+    provider, _ = _llm_config()
+    html = ((STATIC_DIR / name).read_text(encoding="utf-8")
+            .replace("<script", f'<script nonce="{nonce}"')
+            .replace("{{LLM_PROVIDER}}", provider)
+            .replace("{{GATED}}", "1" if auth.gate_enabled() else ""))
     csp = ("default-src 'self'; "
            f"script-src 'nonce-{nonce}' https://www.googletagmanager.com; "
            "style-src 'self' 'unsafe-inline'; "
@@ -109,6 +134,45 @@ def index():
 
 
 # ---------------------------------------------------------------------------
+# TEMPORARY password gate (see app/auth.py). Registered after the rate limiter,
+# so it runs first: unauthenticated requests never reach the API.
+# ---------------------------------------------------------------------------
+
+@app.middleware("http")
+async def _password_gate(request: Request, call_next):
+    if auth.gate_enabled() and not auth.is_open(request.url.path) and not auth.is_authenticated(request):
+        return auth.deny(request)
+    return await call_next(request)
+
+
+@app.get("/login")
+def login_form(next: str = "/"):
+    if not auth.gate_enabled():
+        return RedirectResponse("/", status_code=302)
+    return auth.login_page(auth.safe_next(next))
+
+
+@app.post("/login")
+async def login_submit(request: Request, password: str = Form(""), next: str = Form("/")):
+    if not auth.gate_enabled():
+        return RedirectResponse("/", status_code=303)
+    target = auth.safe_next(next)
+    if auth.check_password(password):
+        resp = RedirectResponse(target, status_code=303)
+        auth.set_cookie(resp, request)
+        return resp
+    log.warning("failed login attempt")
+    return auth.login_page(target, error=True, status=401)
+
+
+@app.post("/logout")
+def logout():
+    resp = RedirectResponse("/login", status_code=303)
+    auth.clear_cookie(resp)
+    return resp
+
+
+# ---------------------------------------------------------------------------
 # Per-client rate limiting on the keyless API. Best-effort: it is in-process
 # (per instance on a serverless platform), so the durable control is the
 # platform's firewall; this stops the casual loop from burning the deployment's
@@ -116,7 +180,7 @@ def index():
 # platform's egress IPs, so the batch limit is deliberately generous.
 # ---------------------------------------------------------------------------
 
-RATE_LIMITS = {"/api/analyze": (6, 60), "/api/verify_batch": (30, 60), "*": (120, 60)}
+RATE_LIMITS = {"/api/analyze": (6, 60), "/api/verify_batch": (30, 60), "/login": (10, 60), "*": (120, 60)}
 
 
 class RateLimiter:
@@ -145,7 +209,8 @@ _LIMITER = RateLimiter(RATE_LIMITS)
 @app.middleware("http")
 async def _rate_limit(request: Request, call_next):
     path = request.url.path
-    if _LIMITER.enabled and path.startswith("/api/") and path != "/api/health":
+    limited = (path.startswith("/api/") and path != "/api/health") or (path == "/login" and request.method == "POST")
+    if _LIMITER.enabled and limited:
         ip = ((request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
               or request.headers.get("x-real-ip")
               or (request.client.host if request.client else "unknown"))
@@ -167,9 +232,9 @@ def _clamp_tokens(value: int) -> int:
 @app.post("/api/analyze")
 async def analyze(
     file: UploadFile = File(...),
-    provider: str = Form(...),
-    api_key: str = Form(...),
     model: str = Form(""),
+    provider: str = Form(""),   # ignored — kept so a cached old page cannot 422
+    api_key: str = Form(""),    # ignored — the key comes from the server env
     openalex_key: str = Form(""),
     max_tokens: int = Form(DEFAULT_MAX_TOKENS),
     check_hallucination: bool = Form(False),
@@ -177,17 +242,15 @@ async def analyze(
 ):
     openalex_key = openalex_key.strip()
     max_tokens = _clamp_tokens(max_tokens)
+    _, server_key = _llm_config()
 
     def safe(msg: object) -> str:
-        return redact(str(msg), api_key, openalex_key)
+        return redact(str(msg), server_key, openalex_key)
 
     # --- cheap, synchronous validation (returns normal JSON errors) ---------
     if not (check_hallucination or check_misquote):
         raise HTTPException(400, "Tick at least one check.")
-    try:
-        llm = LLMClient(provider, api_key, model)
-    except LLMError as exc:
-        raise HTTPException(400, safe(exc))
+    llm = _server_llm(model)
     data = await file.read()  # UploadFile.read is threadpool-backed (non-blocking)
 
     # --- everything else, including text extraction, streamed as NDJSON ----
@@ -378,8 +441,8 @@ class CompareItem(BaseModel):
 
 
 class CompareRequest(BaseModel):
-    provider: str
-    api_key: str
+    provider: str = ""   # ignored — the LLM is configured server-side
+    api_key: str = ""    # ignored
     model: str = ""
     max_tokens: int = DEFAULT_MAX_TOKENS
     items: list[CompareItem]
@@ -389,14 +452,14 @@ class CompareRequest(BaseModel):
 def compare(req: CompareRequest):
     """Run the misquote comparison for individual references — used on the
     fuzzy-matches screen after the user picks the correct candidate work."""
+    llm = _server_llm(req.model)
     try:
-        llm = LLMClient(req.provider, req.api_key, req.model)
         results = list(compare_contexts(
             llm, [item.model_dump() for item in req.items],
             max_tokens=_clamp_tokens(req.max_tokens), strict=True,
         ))
     except LLMError as exc:
-        raise HTTPException(502, redact(str(exc), req.api_key))
+        raise HTTPException(502, llm.redact(str(exc)))
     return {"results": results}
 
 
@@ -678,7 +741,7 @@ def _run_batch(items: list, key: Optional[str]) -> list[dict]:
 # indistinguishable from a parsing failure on the current one.
 # Deployment marker, returned by the verify endpoints (and /api/echo). BUMP on
 # every deploy so "is production current?" stays answerable from a response.
-API_VERSION = "2026-09-03.2"
+API_VERSION = "2026-09-03.3"
 
 
 def _from_query(request: Request) -> tuple[list, Optional[str]]:
