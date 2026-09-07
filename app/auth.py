@@ -5,7 +5,8 @@ whoever knows SITE_PASSWORD. Delete this module and its three hooks in main.py
 (middleware, /login routes, the fail-closed check in _server_llm) to return to
 the open bring-your-own-key mode preserved on the `byok-public` branch.
 
-Session = one HMAC-derived cookie; changing the password logs everyone out.
+Session = one HMAC-derived browser-session cookie (gone when the browser
+closes); changing the password logs everyone out immediately.
 """
 
 from __future__ import annotations
@@ -20,7 +21,8 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 COOKIE = "phantocite_auth"
-MAX_AGE_S = 30 * 24 * 3600
+# Session cookie (no Max-Age): closing the browser ends the session, so every
+# new browser session asks for the password again.
 # Never gated: the login flow itself, monitoring, static assets, and the
 # keyless EduGenAI endpoints (an extension cannot pass a login form and they
 # never touch the LLM key; they are rate-limited separately).
@@ -71,7 +73,7 @@ def deny(request: Request):
 
 def set_cookie(response, request: Request) -> None:
     secure = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
-    response.set_cookie(COOKIE, _token(password() or ""), max_age=MAX_AGE_S, httponly=True,
+    response.set_cookie(COOKIE, _token(password() or ""), httponly=True,
                         secure=secure, samesite="lax", path="/")
 
 

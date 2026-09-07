@@ -19,7 +19,7 @@ import httpx
 LLM_READ_TIMEOUT_CAP_S = float(os.environ.get("LLM_READ_TIMEOUT_CAP_S", "280"))
 
 DEFAULT_MODELS = {
-    "anthropic": "claude-opus-4-8",
+    "anthropic": "claude-sonnet-5",
     "openai": "gpt-4o-mini",
     "gemini": "gemini-2.5-flash",
 }

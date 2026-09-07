@@ -1311,3 +1311,13 @@ def test_login_is_rate_limited(monkeypatch):
         assert client.post("/login", data={"password": "x"}, follow_redirects=False).status_code == 401
     assert client.post("/login", data={"password": "x"}, follow_redirects=False).status_code == 429
     assert client.get("/login").status_code == 200   # GET is not counted
+
+
+def test_login_cookie_is_session_scoped():
+    """No Max-Age/Expires: the password is asked again in every new browser session."""
+    from fastapi.testclient import TestClient
+    from app import main
+    r = TestClient(main.app).post("/login", data={"password": "test-pw", "next": "/"}, follow_redirects=False)
+    cookie = r.headers["set-cookie"].lower()
+    assert "phantocite_auth=" in cookie and "max-age" not in cookie and "expires" not in cookie
+    assert "httponly" in cookie and "samesite=lax" in cookie

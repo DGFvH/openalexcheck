@@ -94,7 +94,7 @@ auto-deployed from `main`. Things the repo cannot set for you:
 
 | Provider dropdown | Default model      | Key type            |
 |-------------------|--------------------|---------------------|
-| Claude (Anthropic)| `claude-opus-4-8`  | `sk-ant-...`        |
+| Claude (Anthropic)| `claude-sonnet-5`  | `sk-ant-...`        |
 | Gemini (Google)   | `gemini-2.5-flash` | AI Studio API key   |
 | ChatGPT (OpenAI)  | `gpt-4o-mini`      | `sk-...`            |
 
