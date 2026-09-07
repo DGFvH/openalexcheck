@@ -83,24 +83,24 @@ def login_page(next_path: str, error: bool = False, status: int = 200) -> HTMLRe
     msg = '<p class="err">Wrong password.</p>' if error else ""
     html = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Citation Checker · sign in</title>
+<link rel="stylesheet" href="/static/ui.css">
 <style>
-  body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f4ef;font:15px/1.5 system-ui,sans-serif;color:#1f2a24}}
-  form{{background:#fff;border:1px solid #e3ded4;border-radius:10px;padding:1.6rem 1.8rem;width:min(360px,92vw);box-shadow:0 2px 12px rgba(0,0,0,.05)}}
-  h1{{font-size:1.15rem;margin:0 0 .3rem}} p{{margin:.2rem 0 1rem;color:#5c655f;font-size:.9rem}}
-  input{{width:100%;box-sizing:border-box;padding:.55rem .7rem;border:1px solid #cfc9bd;border-radius:8px;font:inherit}}
-  button{{margin-top:.9rem;width:100%;padding:.6rem;border:0;border-radius:8px;background:#2e6b4f;color:#fff;font:inherit;cursor:pointer}}
-  .err{{color:#b3261e;font-weight:600}}
+  body {{ min-height: 100vh; display: grid; place-items: center; }}
+  form {{ width: min(360px, 92vw); padding: 1.5rem 1.75rem; }}
+  .err {{ color: var(--bad); font-size: var(--fs-sm); font-weight: 600; }}
+  .btn {{ width: 100%; justify-content: center; margin-top: 1rem; }}
 </style></head><body>
-<form method="post" action="/login">
-  <h1>Citation Checker</h1>
-  <p>This instance is password-protected (temporary).</p>
+<form method="post" action="/login" class="panel">
+  <h3 style="margin-top:0">Citation Checker</h3>
+  <p class="help">This instance is password-protected (temporary).</p>
   {msg}
   <input type="hidden" name="next" value="{escape(next_path, quote=True)}">
-  <input type="password" name="password" placeholder="Password" autofocus autocomplete="current-password">
-  <button type="submit">Sign in</button>
+  <label class="label" for="password">Password</label>
+  <input type="password" id="password" name="password" autofocus autocomplete="current-password">
+  <button type="submit" class="btn primary">Sign in</button>
 </form></body></html>"""
     return HTMLResponse(html, status_code=status, headers={
-        "Content-Security-Policy": "default-src 'self'; style-src 'unsafe-inline'; script-src 'none'; "
+        "Content-Security-Policy": "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'none'; "
                                    "frame-ancestors 'none'; form-action 'self'; base-uri 'self'",
         "X-Content-Type-Options": "nosniff", "Cache-Control": "no-store",
     })

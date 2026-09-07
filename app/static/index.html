@@ -16,199 +16,101 @@
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
 
+<link rel="stylesheet" href="/static/ui.css">
 <style>
-  :root {
-    --bg: #f6f4ef; --card: #ffffff; --ink: #26241f; --muted: #6f6a5f;
-    --accent: #1f6f5c; --border: #e2ddd2;
-    --ok: #1f6f5c; --warn: #b07d18; --bad: #b3392f; --info: #4a5f8a;
-  }
-  * { box-sizing: border-box; }
-  /* One font family throughout (system sans) for consistency and readability;
-     the brand title is the only serif accent. */
-  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.5; }
-  header { padding: 2.2rem 1.5rem 1rem; max-width: min(960px, 94%); margin: 0 auto; }
-  h1 { font-size: 1.7rem; margin: 0 0 .3rem; font-family: Georgia, "Times New Roman", serif; }
-  h1 em { color: var(--accent); font-style: italic; }
-  /* No extra paragraph margin: every subheader line — wrapped or new paragraph —
-     sits at the same line-height rhythm, so the spacing is perfectly even. */
-  .sub { color: var(--muted); margin: 0; font-size: .95rem; line-height: 1.5; }
-  /* Credit block centres vertically against the title so the © line and the
-     icon row sit balanced with the left-hand brand. */
+  /* Layout only — every font, size, colour and radius comes from ui.css. */
+  header.wrap { padding-top: 2rem; padding-bottom: .5rem; }
+  main.wrap { padding-bottom: 4rem; }
   .header-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: .5rem; }
-  .header-top h1 { margin: 0; }
-  .credit { text-align: right; font-family: system-ui, sans-serif; font-size: .8rem; color: var(--muted); }
-  .credit-name { display: block; margin-bottom: .2rem; }
-  .credit-name a { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
-  .credit-name a:hover { color: var(--accent); }
-  .credit-links { display: inline-flex; gap: .5rem; justify-content: flex-end; }
-  .credit-links a { color: var(--muted); display: inline-flex; transition: color .15s; }
+  .credit { text-align: right; font-size: var(--fs-sm); color: var(--muted); }
+  .credit-name { display: flex; justify-content: flex-end; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  .credit-name a { color: var(--muted); }
+  .credit-links { display: inline-flex; gap: .5rem; justify-content: flex-end; margin-top: .25rem; }
+  .credit-links a { color: var(--muted); display: inline-flex; }
   .credit-links a:hover { color: var(--accent); }
-  button.stop { margin-top: 1.3rem; margin-left: .6rem; background: #fff; color: var(--bad); border: 1px solid var(--bad); border-radius: 8px; padding: .65rem 1.2rem; font: inherit; font-family: system-ui, sans-serif; font-size: .95rem; cursor: pointer; }
-  button.stop:hover { background: var(--bad); color: #fff; }
-  button.sample { margin-top: 1.3rem; margin-left: .6rem; background: #e8e4da; color: #4a463d; border: 1px solid var(--border); border-radius: 8px; padding: .65rem 1.2rem; font: inherit; font-family: system-ui, sans-serif; font-size: .95rem; cursor: pointer; }
-  button.sample:hover { background: #ddd7c9; }
-  .sample-banner { font-family: system-ui, sans-serif; font-size: .85rem; background: #eef0ee; border: 1px solid var(--border); border-left: 3px solid var(--muted); border-radius: 6px; padding: .6rem .9rem; margin-top: 1rem; color: var(--ink); }
-  main { max-width: min(960px, 94%); margin: 0 auto; padding: 0 1.5rem 4rem; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.3rem 1.5rem; margin-top: 1.2rem; }
-  label { display: block; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: .9rem 0 .3rem; font-family: system-ui, sans-serif; }
-  input[type=file], input[type=password], input[type=text], input[type=number], select {
-    width: 100%; padding: .6rem .75rem; border: 1px solid var(--border); border-radius: 8px;
-    font: inherit; font-family: system-ui, sans-serif; font-size: .9rem; background: #fff;
-    transition: border-color .15s, box-shadow .15s;
-  }
-  input:hover, select:hover { border-color: #cfc9bb; }
-  input:focus, select:focus {
-    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(31, 111, 92, .14);
-  }
-  /* Selects: custom chevron so they match the text inputs. */
-  select {
-    appearance: none; -webkit-appearance: none; padding-right: 2.2rem;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5 6 6.5 11 1.5' fill='none' stroke='%236f6a5f' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-    background-repeat: no-repeat; background-position: right .8rem center;
-  }
-  /* File input as an upload zone with a styled chooser button. */
-  input[type=file] {
-    border-style: dashed; border-width: 1.5px; background: #fcfbf8;
-    padding: .8rem .9rem; cursor: pointer; color: var(--muted);
-  }
-  input[type=file]:hover { border-color: var(--accent); }
-  input[type=file]::file-selector-button {
-    background: #fff; color: var(--accent); border: 1px solid var(--accent); border-radius: 6px;
-    padding: .45rem .95rem; margin-right: .9rem; font: inherit; font-family: system-ui, sans-serif;
-    font-size: .88rem; cursor: pointer; transition: background .15s, color .15s;
-  }
-  input[type=file]::file-selector-button:hover { background: var(--accent); color: #fff; }
-  .row { display: flex; gap: 1rem; flex-wrap: wrap; }
-  .row > div { flex: 1 1 220px; }
-  /* The two checks as toggle tiles: bordered cards that light up when ticked. */
-  .checks { display: flex; gap: 1rem; margin-top: 1.2rem; flex-wrap: wrap; font-family: system-ui, sans-serif; font-size: .92rem; }
-  .checks label {
-    flex: 1 1 260px; display: flex; align-items: flex-start; gap: .6rem; margin: 0;
-    color: var(--ink); font-size: .92rem; font-weight: 400; text-transform: none; letter-spacing: 0;
-    cursor: pointer; border: 1px solid var(--border); border-radius: 8px; padding: .75rem .9rem;
-    background: #fff; transition: border-color .15s, background .15s;
-  }
-  .checks label:hover { border-color: #b9ccc4; }
-  .checks label:has(input:checked) { border-color: var(--accent); background: #f0f6f3; }
-  .checks input[type=checkbox] { accent-color: var(--accent); margin-top: .2rem; }
-  .checks small { display: block; color: var(--muted); }
-  button.primary {
-    margin-top: 1.3rem; background: var(--accent); color: #fff; border: 0; border-radius: 8px;
-    padding: .65rem 1.4rem; font: inherit; font-family: system-ui, sans-serif; font-size: .95rem; cursor: pointer;
-    transition: background .15s;
-  }
-  button.primary:hover:not(:disabled) { background: #1a5f4f; }
-  button.primary:disabled { opacity: .55; cursor: wait; }
-  .keynote { font-size: .78rem; color: var(--muted); font-family: system-ui, sans-serif; margin-top: .3rem; }
-  .privacy { margin-top: 1.2rem; font-family: system-ui, sans-serif; font-size: .82rem; color: var(--muted); }
-  .privacy summary { cursor: pointer; color: var(--accent); }
-  .privacy ul { margin: .5rem 0 0; padding-left: 1.1rem; }
-  .privacy li { margin: .3rem 0; }
-  .tabs { display: flex; gap: .4rem; margin-top: 1.6rem; border-bottom: 2px solid var(--border); }
-  .tabs button {
-    background: none; border: 0; padding: .6rem 1rem; font: inherit; font-family: system-ui, sans-serif;
-    font-size: .92rem; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -2px;
-  }
-  .tabs button.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
-  .badge { display: inline-block; padding: .13rem .55rem; border-radius: 999px; font-family: system-ui, sans-serif; font-size: .72rem; font-weight: 600; color: #fff; vertical-align: middle; }
-  .badge.found { background: var(--ok); } .badge.fuzzy { background: var(--warn); }
-  .badge.not_found { background: var(--bad); } .badge.lookup_failed { background: var(--info); }
-  .badge.match { background: var(--ok); } .badge.likely_mismatch { background: var(--warn); }
-  .badge.mismatch { background: var(--bad); } .badge.unclear { background: var(--info); }
-  .ref { border: 1px solid var(--border); border-radius: 8px; margin-top: .9rem; background: #fff; }
-  .ref .raw { font-size: .9rem; background: var(--bg); border-left: 3px solid #cfc9bb; border-radius: 4px; padding: .5rem .8rem; margin: .4rem 0 0; }
-  /* Each card auto-collapses; the summary bar stays visible and carries both
-     section verdicts, so the whole list can be scanned without expanding. */
-  .ref > summary { list-style: none; cursor: pointer; padding: .8rem 1.1rem; display: flex; flex-wrap: wrap; align-items: center; gap: .3rem .5rem; }
-  .ref > summary::-webkit-details-marker { display: none; }
-  .ref > summary::after { content: "▸"; color: var(--muted); font-size: .8rem; margin-left: .1rem; transition: transform .15s; }
+  .inline-form { display: inline; }
+  .sub { color: var(--muted); margin: 0; }
+  .foot { color: var(--muted); font-size: var(--fs-sm); margin: 1rem 0 0; }
+  body:not([data-gated="1"]) .gated-only { display: none; }
+  #form-card { margin-top: 1.5rem; padding: 1.25rem 1.5rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0 1.5rem; }
+  .checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: .75rem; margin-top: 1rem; }
+  .checks label { display: flex; align-items: flex-start; gap: .6rem; cursor: pointer; margin: 0; }
+  .checks label:hover { border-color: var(--accent); }
+  .checks label:has(input:checked) { border-color: var(--accent); background: var(--ok-bg); }
+  .checks input { margin-top: .25rem; }
+  .checks small { display: block; color: var(--muted); font-size: var(--fs-sm); }
+  details.advanced, details.privacy { margin-top: 1rem; font-size: var(--fs-sm); }
+  details.advanced > summary, details.privacy > summary { color: var(--accent); font-weight: 600; }
+  details.advanced > summary::before, details.privacy > summary::before { content: "▸ "; display: inline-block; transition: transform .15s; }
+  details.advanced[open] > summary::before, details.privacy[open] > summary::before { transform: rotate(90deg); }
+  details.privacy ul { margin: .5rem 0 0; padding-left: 1.1rem; color: var(--muted); }
+  details.privacy li { margin: .25rem 0; }
+  .actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1.5rem; }
+  .progress { margin-top: 1rem; }
+  .progress-head { display: flex; align-items: center; gap: .5rem; }
+  .progress-head .dot { width: 9px; height: 9px; border-radius: var(--r-pill); background: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+  .progress-bar-track { height: 5px; background: var(--border); border-radius: var(--r-pill); margin: .5rem 0; overflow: hidden; }
+  .progress-bar-fill { height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
+  .progress-log { font-size: var(--fs-sm); color: var(--muted); max-height: 8.5rem; overflow-y: auto; }
+  .progress-log div.tick::before { content: "✓ "; color: var(--ok); }
+  .error { color: var(--bad); font-size: var(--fs-sm); margin-top: 1rem; white-space: pre-wrap; }
+  .tabs { display: flex; gap: .25rem; margin-top: 1.5rem; border-bottom: 1px solid var(--border); }
+  .tabs button { background: none; border: 0; padding: .6rem 1rem; font: inherit; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabs button.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .summary-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; }
+  .summary { display: flex; gap: .4rem; flex-wrap: wrap; }
+  .downloads { display: flex; gap: .25rem; }
+  .banner { margin-top: 1rem; font-size: var(--fs-sm); }
+  .ref { margin-top: .75rem; padding: 0; }
+  .ref > summary { padding: .9rem 1.25rem; display: grid; grid-template-columns: 1fr auto; gap: .4rem 1rem; align-items: center; }
+  .ref > summary::after { content: "▸"; color: var(--muted); grid-column: 2; grid-row: 1; transition: transform .15s; }
   .ref[open] > summary::after { transform: rotate(90deg); }
   .ref[open] > summary { border-bottom: 1px solid var(--border); }
-  .ref-sum-title { flex-basis: 100%; font-size: .82rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .ref-checks { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: .4rem; }
-  .scheck { font-family: system-ui, sans-serif; font-size: .74rem; font-weight: 600; padding: .13rem .55rem; border-radius: 999px; border: 1px solid transparent; }
-  .scheck b { font-weight: 700; margin-right: .15rem; }
-  .scheck.ok { background: #dfeee8; color: var(--ok); }
-  .scheck.warn { background: #f6ecd0; color: #8a5a12; }
-  .scheck.bad { background: #f6dcd8; color: var(--bad); }
-  .scheck.muted { background: var(--bg); color: var(--muted); border-color: var(--border); }
-  .ref-body { padding: 0 1.1rem 1rem; }
-  .ref.static { padding: .9rem 1.1rem; }  /* non-collapsing cards (fuzzy screen) */
-  .orphan-card { border-left: 3px solid var(--bad); }
-  .orphan-item { font-family: system-ui, sans-serif; font-size: .88rem; margin-top: .5rem; }
-  .orphan-item .meta-inline { color: var(--muted); font-size: .84rem; }
-  /* Each check (Source / Usage) is its own collapsible part inside a card. */
-  .part { border: 1px solid var(--border); border-radius: 6px; margin-top: .7rem; background: #fff; }
-  .part > summary.part-sum { list-style: none; cursor: pointer; padding: .5rem .7rem; display: flex; align-items: center; flex-wrap: wrap; gap: .35rem .5rem; }
-  .part > summary.part-sum::-webkit-details-marker { display: none; }
-  .part > summary.part-sum::before { content: "▸"; color: var(--muted); font-size: .8rem; transition: transform .15s; }
-  .part[open] > summary.part-sum::before { transform: rotate(90deg); }
-  .part[open] > summary.part-sum { border-bottom: 1px solid var(--border); }
-  .part-no { display: inline-flex; align-items: center; justify-content: center; width: 1.15rem; height: 1.15rem; border-radius: 4px; background: var(--bg); color: var(--muted); font-size: .72rem; font-weight: 700; }
-  .part-name { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
-  .part > summary.part-sum .hint { font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); font-size: .78rem; flex-basis: 100%; }
-  .part-body { padding: .1rem .7rem .7rem; }
-  .sect { border-top: 1px solid var(--border); margin-top: .85rem; padding-top: .7rem; }
-  .sect-title { margin: 0 0 .45rem; font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
-  .sect-title .hint { font-weight: 400; text-transform: none; letter-spacing: 0; }
-  .ref-head { display: flex; align-items: center; gap: .2rem; }
-  .ref-head .refno { margin-left: auto; font-size: .75rem; color: var(--muted); }
-  .meta, .note { font-family: system-ui, sans-serif; font-size: .8rem; color: var(--muted); margin-top: .25rem; }
-  .note { color: #8a5a12; }
-  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; margin-top: .7rem; }
-  @media (max-width: 700px) { .compare { grid-template-columns: 1fr; } }
-  .compare .box { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: .6rem .8rem; font-size: .85rem; }
-  .compare .box h4 { margin: 0 0 .35rem; font-family: system-ui, sans-serif; font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-  .verdict { margin-top: .6rem; font-family: system-ui, sans-serif; font-size: .85rem; }
-  .cand { border-top: 1px dashed var(--border); margin-top: .7rem; padding-top: .7rem; font-size: .9rem; }
-  .cand button { font-family: system-ui, sans-serif; font-size: .78rem; padding: .3rem .8rem; border: 1px solid var(--accent); color: var(--accent); background: #fff; border-radius: 6px; cursor: pointer; margin-top: .35rem; }
-  .cand button:hover { background: var(--accent); color: #fff; }
-  .summary-row { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 1rem; }
-  .summary { font-family: system-ui, sans-serif; font-size: .9rem; display: flex; gap: 1.4rem; flex-wrap: wrap; }
-  .downloads { display: flex; gap: .4rem; font-family: system-ui, sans-serif; }
-  .downloads button { font-size: .78rem; padding: .35rem .7rem; border: 1px solid var(--border); background: #fff; color: var(--ink); border-radius: 6px; cursor: pointer; }
-  .downloads button:hover { border-color: var(--accent); color: var(--accent); }
-  .sev { display: inline-block; margin-left: .5rem; font-family: system-ui, sans-serif; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: .1rem .45rem; border-radius: 4px; vertical-align: middle; }
-  .sev.high { background: #f6dcd8; color: var(--bad); } .sev.med { background: #f6ecd0; color: #8a5a12; } .sev.low { background: #dfeee8; color: var(--ok); }
-  .fields { width: 100%; border-collapse: collapse; font-family: system-ui, sans-serif; font-size: .8rem; margin-top: .6rem; }
-  .fields th { text-align: left; color: var(--muted); font-weight: 600; padding: .2rem .5rem .2rem 0; font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; }
-  .fields td { padding: .25rem .5rem .25rem 0; border-top: 1px solid var(--border); vertical-align: top; }
-  .fields td.f-status { white-space: nowrap; }
-  .fields .fs-match { color: var(--ok); } .fields .fs-mismatch { color: var(--bad); font-weight: 600; } .fields .fs-unverifiable { color: var(--info); }
-  .fields .fs-close { color: #8a5a12; font-weight: 600; }
-  .fields tr.row-mismatch td { background: #fbf1ef; }
-  .fields tr.row-close td { background: #faf5e6; }
-  .field-note { font-family: system-ui, sans-serif; font-size: .82rem; margin-top: .5rem; }
+  .ref-line { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; min-width: 0; }
+  .ref-line .refno { color: var(--muted); font-size: var(--fs-sm); }
+  .ref-line .title { font-size: var(--fs-sm); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 200px; min-width: 0; }
+  .ref-checks { grid-column: 1 / -1; display: flex; gap: .4rem; flex-wrap: wrap; }
+  .ref-body { padding: .25rem 1.25rem 1.25rem; }
+  .ref.static { padding: 1rem 1.25rem; }
+  .raw { font-size: var(--fs-sm); padding: .6rem .9rem; margin-top: .25rem; overflow-wrap: anywhere; }
+  .section { border-top: 1px solid var(--border); margin-top: 1rem; padding-top: .75rem; }
+  .section > summary { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+  .section > summary::before { content: "▸"; color: var(--muted); font-size: var(--fs-sm); transition: transform .15s; }
+  .section[open] > summary::before { transform: rotate(90deg); }
+  .section > summary .label { margin: 0; }
+  .section > summary .hint { color: var(--muted); font-size: var(--fs-sm); flex-basis: 100%; }
+  .section-body { padding-top: .5rem; }
+  .meta, .note { font-size: var(--fs-sm); color: var(--muted); margin-top: .35rem; overflow-wrap: anywhere; }
+  .note { color: var(--warn); }
+  .field-note { font-size: var(--fs-sm); margin-top: .5rem; }
   .field-note.bad { color: var(--bad); } .field-note.ok { color: var(--ok); }
-  details.abstract { margin-top: .5rem; font-size: .85rem; }
-  details.abstract summary { cursor: pointer; font-family: system-ui, sans-serif; font-size: .8rem; color: var(--accent); }
-  details.abstract p { margin: .5rem 0 0; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: .6rem .8rem; }
-  .summary-line { font-family: system-ui, sans-serif; font-size: .85rem; margin-top: .5rem; }
-  .summary-line strong { color: var(--muted); font-weight: 600; }
-  .error { color: var(--bad); font-family: system-ui, sans-serif; font-size: .9rem; margin-top: 1rem; white-space: pre-wrap; }
-  .spinner { font-family: system-ui, sans-serif; color: var(--muted); margin-top: 1rem; }
-  .progress-panel { margin-top: 1.3rem; font-family: system-ui, sans-serif; }
-  .progress-head { display: flex; align-items: center; gap: .5rem; font-size: .92rem; color: var(--ink); }
-  .progress-head .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); animation: pulse 1.1s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
-  .progress-bar-track { height: 5px; background: var(--border); border-radius: 3px; margin: .6rem 0; overflow: hidden; }
-  .progress-bar-fill { height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
-  .progress-log { font-size: .78rem; color: var(--muted); max-height: 8.5rem; overflow-y: auto; }
-  .progress-log div { padding: .1rem 0; }
-  .progress-log div.tick::before { content: "✓ "; color: var(--ok); }
-  .hidden { display: none; }
-  a { color: var(--accent); }
-  body:not([data-gated="1"]) .gated-only { display: none; }
-  .linkbtn { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font: inherit; }
+  .table tr.row-mismatch td:first-child { box-shadow: inset 3px 0 var(--bad); padding-left: .5rem; }
+  .table-wrap { overflow-x: auto; margin-top: .5rem; }
+  details.abstract { margin-top: .5rem; font-size: var(--fs-sm); }
+  details.abstract > summary { color: var(--accent); font-weight: 600; }
+  details.abstract > p { margin: .5rem 0 0; }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-top: .75rem; }
+  @media (max-width: 700px) { .compare { grid-template-columns: 1fr; } }
+  .compare .panel { font-size: var(--fs-sm); }
+  .compare .panel p { margin: 0 0 .5rem; }
+  .compare .label { margin: 0 0 .5rem; }
+  .verdict { margin-top: .5rem; font-size: var(--fs-sm); display: flex; gap: .5rem; align-items: flex-start; flex-wrap: wrap; }
+  .cand { border-top: 1px dashed var(--border); margin-top: .75rem; padding-top: .75rem; font-size: var(--fs-sm); }
+  .cand .btn { margin-top: .5rem; }
+  .orphan-item { font-size: var(--fs-sm); margin-top: .5rem; overflow-wrap: anywhere; }
+  .orphan-item .meta-inline { color: var(--muted); }
 </style>
 </head>
 <body data-provider="{{LLM_PROVIDER}}" data-gated="{{GATED}}">
-<header>
+<header class="wrap">
   <div class="header-top">
     <h1>Citation Checker <em>· OpenAlex</em></h1>
     <div class="credit">
       <span class="credit-name">© Daniël van Hemert ·
-        <a href="https://github.com/DGFvH/openalexcheck/blob/main/LICENSE" target="_blank" rel="noopener" title="PolyForm Noncommercial License 1.0.0">Noncommercial license</a></span>
+        <a href="https://github.com/DGFvH/openalexcheck/blob/main/LICENSE" target="_blank" rel="noopener" title="PolyForm Noncommercial License 1.0.0">Noncommercial license</a>
+        <form method="post" action="/logout" class="inline-form gated-only"><button class="btn ghost small" type="submit">Log out</button></form></span>
       <span class="credit-links">
         <a href="https://danielvanhemert.com" target="_blank" rel="noopener" title="danielvanhemert.com" aria-label="Website">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm6.9 6h-2.5a15.6 15.6 0 00-1.3-3.4A8 8 0 0118.9 8zM12 4c.7 1 1.3 2.3 1.7 4h-3.4c.4-1.7 1-3 1.7-4zM4.3 14a8 8 0 010-4h2.9a17 17 0 000 4H4.3zm.8 2h2.5c.3 1.2.8 2.4 1.3 3.4A8 8 0 015.1 16zm2.5-8H5.1a8 8 0 013.8-3.4C8.4 5.6 7.9 6.8 7.6 8zM12 20c-.7-1-1.3-2.3-1.7-4h3.4c-.4 1.7-1 3-1.7 4zm2.1-6H9.9a15 15 0 010-4h4.2a15 15 0 010 4zm.8 5.4c.5-1 1-2.2 1.3-3.4h2.5a8 8 0 01-3.8 3.4zM16.8 14a17 17 0 000-4h2.9a8 8 0 010 4h-2.9z"/></svg>
@@ -228,58 +130,57 @@
       </span>
     </div>
   </div>
-  <p class="sub">Upload a student paper. References are checked with OpenAlex, citation contexts are compared with abstracts using an LLM.</p>
-  <p class="sub gated-only">This instance runs on the site owner's API key and is password-protected (temporary). <form method="post" action="/logout" style="display:inline"><button class="linkbtn" type="submit">Log out</button></form></p>
-  <p class="sub">Using EduGenAI? Follow <a href="/edugenai">these instructions</a>. Using another tool? Contact me via the links above, I will add instructions.</p>
-  <p class="sub">Always confirm that your institution's privacy policy permits this use. The tool checks abstracts only and may produce false positives or negatives. It is a diagnostic. Verify results manually.</p>
+  <p class="sub">Upload a student paper. References are checked against OpenAlex; each citing sentence is compared with the source's abstract by an LLM.</p>
 </header>
-<main>
-  <div class="card" id="form-card">
-    <label>Document (.pdf or .docx)</label>
+<main class="wrap">
+  <div class="panel" id="form-card">
+    <label class="label" for="file">Document (.pdf or .docx)</label>
     <input type="file" id="file" accept=".pdf,.docx">
-    <div class="row">
+    <div class="grid">
       <div>
-        <label>LLM</label>
-        <div class="keynote" id="llm-note">Runs on the site owner's <span id="provider-name"></span> API key (configured on the server) — no key to paste.</div>
-      </div>
-      <div>
-        <label>Model</label>
+        <label class="label" for="model_select">Model</label>
         <select id="model_select"></select>
-        <input type="text" id="model" class="hidden" autocomplete="off" placeholder="exact model id" style="margin-top:.4rem">
-      </div>
-    </div>
-    <div class="row">
-      <div>
-        <label>OpenAlex API key (optional)</label>
-        <input type="password" id="openalex_key" autocomplete="new-password" spellcheck="false" placeholder="only needed for OpenAlex Premium">
-        <div class="keynote">OpenAlex works without a key. If you have a Premium key, it is likewise one-time use and never stored.</div>
-      </div>
-      <div>
-        <label>Max output tokens per LLM call</label>
-        <input type="number" id="max_tokens" value="16000" min="1000" max="64000" step="1000">
-        <div class="keynote">Caps each model call. Raise it for very long bibliographies; lower it to control cost. 1000–64000.</div>
+        <input type="text" id="model" class="hidden" autocomplete="off" placeholder="exact model id" style="margin-top:.5rem">
+        <div class="help" id="llm-note">Runs on the site owner's <span id="provider-name"></span> API key — nothing to paste.</div>
       </div>
     </div>
     <div class="checks">
-      <label><input type="checkbox" id="check_hallucination" checked>
+      <label class="panel"><input type="checkbox" id="check_hallucination" checked>
         <span><strong>1 · Hallucination check</strong><small>Does each reference actually exist in OpenAlex?</small></span></label>
-      <label><input type="checkbox" id="check_misquote" checked>
+      <label class="panel"><input type="checkbox" id="check_misquote" checked>
         <span><strong>2 · Misquote check</strong><small>Does the citing sentence match what the source's abstract says?</small></span></label>
     </div>
+    <details class="advanced">
+      <summary>Advanced options</summary>
+      <div class="grid">
+        <div>
+          <label class="label" for="openalex_key">OpenAlex API key (optional)</label>
+          <input type="password" id="openalex_key" autocomplete="new-password" spellcheck="false" placeholder="only needed for OpenAlex Premium">
+          <div class="help">OpenAlex works without a key. A Premium key is one-time use and never stored.</div>
+        </div>
+        <div>
+          <label class="label" for="max_tokens">Max output tokens per LLM call</label>
+          <input type="number" id="max_tokens" value="16000" min="1000" max="64000" step="1000">
+          <div class="help">Caps each model call. Raise it for very long bibliographies; lower it to control cost. 1000–64000.</div>
+        </div>
+      </div>
+    </details>
     <details class="privacy">
       <summary>What data leaves your machine?</summary>
       <ul>
         <li><strong>OpenAlex</strong> receives only reference <em>titles and DOIs</em> — never the paper's prose, the student's name, or any body text.</li>
         <li><strong>The configured LLM provider</strong> (<span class="provider-name-copy"></span>) receives the document text (needed to locate the reference list and citing sentences) and, for the misquote check, the citation snippets plus OpenAlex abstracts — nothing more. Requests run under the site owner's API key.</li>
-        <li>All three providers state that data sent via an <em>API key</em> is <strong>not used to train their models</strong> by default. Since you bring your own key, the request runs under your account's terms.</li>
+        <li>All three providers state that data sent via an <em>API key</em> is <strong>not used to train their models</strong> by default.</li>
         <li><strong>Google Analytics</strong> (gtag.js) is loaded on this page and receives anonymous page-view statistics — never your document, keys, or results.</li>
         <li>This tool stores nothing: no database, no file writes, no logs of your document or keys.</li>
       </ul>
     </details>
-    <button class="primary" id="run">Run checks</button>
-    <button class="stop hidden" id="stop">■ Stop</button>
-    <button class="sample" id="sample" title="See an example — no file or key needed">Sample output</button>
-    <div class="progress-panel hidden" id="progress-panel">
+    <div class="actions">
+      <button class="btn primary" id="run">Run checks</button>
+      <button class="btn secondary bad hidden" id="stop">Stop</button>
+      <button class="btn secondary" id="sample" title="See an example — no file needed">Sample output</button>
+    </div>
+    <div class="panel inset progress hidden" id="progress-panel">
       <div class="progress-head">
         <span class="dot"></span>
         <span id="progress-status">Starting…</span>
@@ -289,6 +190,7 @@
     </div>
     <div class="error hidden" id="error"></div>
   </div>
+  <p class="foot">Using EduGenAI? Follow <a href="/edugenai">these instructions</a>. <span class="gated-only">This instance runs on the site owner's API key and is password-protected (temporary). </span>The tool checks abstracts only and may produce false positives or negatives — verify results manually, and confirm that your institution's privacy policy permits this use.</p>
 
   <div id="results-area" class="hidden">
     <div class="tabs">
@@ -298,9 +200,9 @@
     <div class="summary-row">
       <div class="summary" id="summary"></div>
       <div class="downloads" id="downloads" style="display:none">
-        <button data-fmt="csv">⬇ CSV</button>
-        <button data-fmt="md">⬇ Markdown</button>
-        <button data-fmt="html">⬇ HTML</button>
+        <button class="btn ghost small" data-fmt="csv">⬇ CSV</button>
+        <button class="btn ghost small" data-fmt="md">⬇ Markdown</button>
+        <button class="btn ghost small" data-fmt="html">⬇ HTML</button>
       </div>
     </div>
     <div id="orphans"></div>
@@ -359,6 +261,11 @@ function selectedModel() {
 
 const STATUS_LABEL = { found: "Verified", fuzzy: "Fuzzy match", not_found: "Potential hallucination", lookup_failed: "Lookup failed" };
 const VERDICT_LABEL = { match: "Consistent", likely_mismatch: "Likely mismatch", mismatch: "Mismatch", unclear: "Unclear" };
+// One chip component; these map server enums onto its four tones.
+const STATUS_TONE = { found: "ok", fuzzy: "warn", not_found: "bad", lookup_failed: "info" };
+const VERDICT_TONE = { match: "ok", likely_mismatch: "warn", mismatch: "bad", unclear: "info" };
+const FIELD_TONE = { match: "ok", close: "warn", mismatch: "bad", unverifiable: "info" };
+const statusChip = r => `<span class="chip ${STATUS_TONE[r.status] || ""}">${STATUS_LABEL[r.status] ?? esc(r.status)}</span>`;
 
 $("run").addEventListener("click", runAnalysis);
 $("stop").addEventListener("click", stopAnalysis);
@@ -517,7 +424,7 @@ function showSample() {
   ensureResultsVisible();
   finalize();
   const banner = document.createElement("div");
-  banner.className = "sample-banner";
+  banner.className = "panel tone-info banner sample-banner";
   banner.innerHTML = "🧪 <strong>Sample output</strong> — an illustrative example using five real papers (three cited with errors, two clean). This is a static demo: no document or API key was used.";
   $("screen-results").prepend(banner);
   $("results-area").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -724,10 +631,10 @@ function misquoteFlagged(r) {
 function renderOrphans() {
   const items = DATA.orphans || [];
   $("orphans").innerHTML = !items.length ? "" : `
-    <div class="ref static orphan-card">
-      <div class="ref-head"><span class="badge not_found">Missing reference</span>
+    <div class="panel tone-bad ref static orphan-card">
+      <div class="ref-line"><span class="chip bad">Missing reference</span>
         <span class="refno">${items.length} in-text citation${items.length > 1 ? "s" : ""}</span></div>
-      <div class="meta" style="margin-top:.4rem">These sources are cited in the body but have <strong>no entry in the reference list</strong>, so they cannot be verified — the reference is missing (or the citation is misspelled).</div>
+      <div class="meta">These sources are cited in the body but have <strong>no entry in the reference list</strong>, so they cannot be verified — the reference is missing (or the citation is misspelled).</div>
       ${items.map(o => `<div class="orphan-item"><strong>${esc(o.label)}</strong>${o.context ? ` — <span class="meta-inline">“${esc(o.context)}”</span>` : ""}</div>`).join("")}
     </div>`;
 }
@@ -751,14 +658,16 @@ function updateSummary() {
   if (meta) reviewBits.push(`${meta} with wrong details`);
   if (misq) reviewBits.push(`${misq} cited out of context`);
   const reviewTip = reviewBits.length ? ` (${reviewBits.join(", ")})` : "";
+  const chip = (n, text, tone, title) =>
+    `<span class="chip soft ${tone}"${title ? ` title="${esc(title)}"` : ""}>${n} ${text}</span>`;
   $("summary").innerHTML =
-    `<span>${results.length} references</span>` +
-    `<span style="color:var(--ok)">● ${clean} verified &amp; consistent</span>` +
-    `<span style="color:var(--warn)" title="Exist in OpenAlex but need a human look${esc(reviewTip)}">● ${flagged} need review${reviewTip}</span>` +
-    (fuzzy ? `<span style="color:var(--warn)">● ${fuzzy} fuzzy</span>` : "") +
-    `<span style="color:var(--bad)">● ${notFound} potential hallucinations</span>` +
-    (orphanCount ? `<span style="color:var(--bad)">● ${orphanCount} cited but missing from the reference list</span>` : "") +
-    (lookupFail ? `<span style="color:var(--info)">● ${lookupFail} lookup failed</span>` : "");
+    chip(results.length, results.length === 1 ? "reference" : "references", "") +
+    chip(clean, "verified", "ok") +
+    chip(flagged, "need review", flagged ? "warn" : "", "Exist in OpenAlex but need a human look" + reviewTip) +
+    (fuzzy ? chip(fuzzy, "fuzzy", "warn") : "") +
+    chip(notFound, notFound === 1 ? "potential hallucination" : "potential hallucinations", notFound ? "bad" : "") +
+    (orphanCount ? chip(orphanCount, "missing from the reference list", "bad") : "") +
+    (lookupFail ? chip(lookupFail, "not checked", "info") : "");
   $("fuzzy-count").textContent = fuzzy ? `(${fuzzy})` : "";
 }
 
@@ -799,7 +708,7 @@ function finalize(opts) {
   updateSummary();
   if (PARTIAL) {
     const banner = document.createElement("div");
-    banner.className = "sample-banner partial-banner";
+    banner.className = "panel tone-warn banner partial-banner";
     banner.textContent = "⚠ " + partialMessage(opts);
     $("screen-results").prepend(banner);
     ensureResultsVisible();
@@ -845,8 +754,8 @@ function severity(r) {
 
 function sevChip(r) {
   const s = severity(r);
-  if (s >= 70) return `<span class="sev high">Review</span>`;
-  if (s >= 45) return `<span class="sev med">Check</span>`;
+  if (s >= 70) return `<span class="chip soft bad">Review</span>`;
+  if (s >= 45) return `<span class="chip soft warn">Check</span>`;
   return "";
 }
 
@@ -872,7 +781,7 @@ function usageVerdict(r) {
   return { label: "Verified", cls: "ok" };  // "match"
 }
 function refChecks(r) {
-  const chip = (n, name, v) => `<span class="scheck ${v.cls}"><b>${n})</b> ${name}: ${v.label}</span>`;
+  const chip = (n, name, v) => `<span class="chip soft ${v.cls}">${n} · ${name}: ${v.label}</span>`;
   const uv = usageVerdict(r);
   return chip("1", "Source", sourceVerdict(r)) + (uv ? chip("2", "Usage", uv) : "");
 }
@@ -880,21 +789,18 @@ function refChecks(r) {
 function refSummary(r) {
   const ref = r.reference;
   return `<summary>
-      <span class="badge ${esc(r.status)}">${STATUS_LABEL[r.status] ?? esc(r.status)}</span>${sevChip(r)}
-      <span class="refno">Ref #${esc(ref.id)}</span>
-      <span class="ref-sum-title">${esc(ref.raw || ref.title || "(unlabelled reference)")}</span>
+      <span class="ref-line">${statusChip(r)}${sevChip(r)}
+        <span class="refno">#${esc(ref.id)}</span>
+        <span class="title">${esc(ref.raw || ref.title || "(unlabelled reference)")}</span></span>
       <span class="ref-checks">${refChecks(r)}</span>
     </summary>`;
 }
 
 function refHeader(r) {
   const ref = r.reference;
-  return `<div class="ref-head"><span class="badge ${esc(r.status)}">${STATUS_LABEL[r.status] ?? esc(r.status)}</span>${sevChip(r)}
-      <span class="refno">Ref #${esc(ref.id)}</span></div>
-    <div class="sect" style="border-top:0;padding-top:.5rem;margin-top:0">
-      <h4 class="sect-title">Reference — as printed in the paper</h4>
-      <div class="raw">${esc(ref.raw || ref.title || "(unlabelled reference)")}</div>
-    </div>`;
+  return `<div class="ref-line">${statusChip(r)}${sevChip(r)}<span class="refno">#${esc(ref.id)}</span></div>
+    <h4 class="label">Reference — as printed in the paper</h4>
+    <div class="panel inset raw">${esc(ref.raw || ref.title || "(unlabelled reference)")}</div>`;
 }
 
 const FIELD_LABEL = { title: "Title", authors: "Authors", year: "Year", doi: "DOI",
@@ -915,24 +821,23 @@ function renderFieldCheck(r) {
     head = `<div class="field-note ok">✓ Title, authors, year, and other printed details match the OpenAlex record.</div>`;
   }
   const rows = fields.map(f => `
-    <tr class="${f.status === "mismatch" ? "row-mismatch" : f.status === "close" ? "row-close" : ""}">
+    <tr class="${f.status === "mismatch" ? "row-mismatch" : ""}">
       <td>${FIELD_LABEL[f.field] || esc(f.field)}</td>
-      <td class="f-status fs-${esc(f.status)}">${FIELD_STATUS_LABEL[f.status] || esc(f.status)}</td>
+      <td><span class="chip soft ${FIELD_TONE[f.status] || ""}">${FIELD_STATUS_LABEL[f.status] || esc(f.status)}</span></td>
       <td>${esc(f.reference_value ?? "—")}</td>
       <td>${esc(f.openalex_value ?? "—")}</td>
     </tr>`).join("");
   return head + `<details class="abstract"${mism.length ? " open" : ""}>
     <summary>Field-by-field comparison (${fields.length})</summary>
-    <table class="fields"><thead><tr><th>Field</th><th>Status</th><th>In reference</th><th>In OpenAlex</th></tr></thead>
-    <tbody>${rows}</tbody></table></details>`;
+    <div class="table-wrap"><table class="table"><thead><tr><th>Field</th><th>Status</th><th>In reference</th><th>In OpenAlex</th></tr></thead>
+    <tbody>${rows}</tbody></table></div></details>`;
 }
 
 // Summary bar for one collapsible part (Source / Usage). Shows the numbered
 // section title, its verdict chip, and the one-line hint.
 function partSummary(no, name, v, hint) {
-  return `<summary class="part-sum"><span class="part-no">${no}</span>
-      <span class="part-name">${name}</span>
-      <span class="scheck ${v.cls}">${v.label}</span>
+  return `<summary><span class="label">${no} · ${name}</span>
+      <span class="chip soft ${v.cls}">${v.label}</span>
       <span class="hint">${hint}</span></summary>`;
 }
 
@@ -956,9 +861,9 @@ function renderSourceCheck(r) {
     ${renderFieldCheck(r)}
     ${abstractBit}`;
   // Auto-open when it needs a look; collapsed when the source is clean.
-  return `<details class="part source-part"${sv.cls !== "ok" ? " open" : ""}>
-    ${partSummary("1", "Source check", sv, "— does the reference exist, and do the printed details match?")}
-    <div class="part-body">${body}</div>
+  return `<details class="section source-part"${sv.cls !== "ok" ? " open" : ""}>
+    ${partSummary("1", "Source check", sv, "Does the reference exist, and do the printed details match?")}
+    <div class="section-body">${body}</div>
   </details>`;
 }
 
@@ -966,13 +871,11 @@ function renderResult(r) {
   const ref = r.reference;
   // Auto-collapsed card: the summary bar (badge + both section verdicts) is
   // always visible; the details expand on click.
-  return `<details class="ref" id="ref-${esc(ref.id)}">
+  return `<details class="panel ref" id="ref-${esc(ref.id)}">
     ${refSummary(r)}
     <div class="ref-body">
-      <div class="sect" style="border-top:0;padding-top:.7rem;margin-top:0">
-        <h4 class="sect-title">Reference — as printed in the paper</h4>
-        <div class="raw">${esc(ref.raw || ref.title || "(unlabelled reference)")}</div>
-      </div>
+      <h4 class="label">Reference — as printed in the paper</h4>
+      <div class="panel inset raw">${esc(ref.raw || ref.title || "(unlabelled reference)")}</div>
       ${renderSourceCheck(r)}
       ${renderMisquote(r)}
     </div>
@@ -996,16 +899,16 @@ function renderMisquote(r) {
     body = misquoteBlock(m, contexts, r.work && r.work.abstract);
   }
   // Auto-open when it needs a look (or is still resolving); collapsed when consistent.
-  return `<details class="part usage-part"${uv.cls !== "ok" ? " open" : ""}>
-    ${partSummary("2", "Usage check", uv, "— is the source cited for what it actually says?")}
-    <div class="part-body">${body}</div>
+  return `<details class="section usage-part"${uv.cls !== "ok" ? " open" : ""}>
+    ${partSummary("2", "Usage check", uv, "Is the source cited for what it actually says?")}
+    <div class="section-body">${body}</div>
   </details>`;
 }
 
 function misquoteBlock(m, contexts, abstract) {
-  let html = `<div class="verdict"><span class="badge ${esc(m.verdict)}">${VERDICT_LABEL[m.verdict] ?? esc(m.verdict)}</span> ${esc(m.explanation || "")}</div>`;
+  let html = `<div class="verdict"><span class="chip ${VERDICT_TONE[m.verdict] || ""}">${VERDICT_LABEL[m.verdict] ?? esc(m.verdict)}</span><span>${esc(m.explanation || "")}</span></div>`;
   if (m.paper_topic || m.student_usage) {
-    html += `<div class="meta" style="margin-top:.35rem">Student cites it as: <strong>${esc(m.student_usage || "?")}</strong> · Paper is actually about: <strong>${esc(m.paper_topic || "?")}</strong></div>`;
+    html += `<div class="meta">Student cites it as: <strong>${esc(m.student_usage || "?")}</strong> · Paper is actually about: <strong>${esc(m.paper_topic || "?")}</strong></div>`;
   }
   const left = contexts.length
     ? contexts.map(c => `<p>“${esc(c)}”</p>`).join("")
@@ -1015,8 +918,8 @@ function misquoteBlock(m, contexts, abstract) {
   if (abstract) right += `<details class="abstract"><summary>Full OpenAlex abstract</summary><p>${esc(abstract)}</p></details>`;
   if (!right) right = "<p class='meta'>No abstract available in OpenAlex.</p>";
   html += `<div class="compare">
-    <div class="box"><h4>In the student's paper</h4>${left}</div>
-    <div class="box"><h4>What the paper is about</h4>${right}</div>
+    <div class="panel inset"><h4 class="label">In the student's paper</h4>${left}</div>
+    <div class="panel inset"><h4 class="label">What the paper is about</h4>${right}</div>
   </div>`;
   return html;
 }
@@ -1028,10 +931,10 @@ function renderFuzzy(r) {
       <a href="${safeUrl(c.url)}" target="_blank" rel="noopener">${esc(c.title)}</a>
       (${esc(c.year ?? "?")}) — ${esc((c.authors || []).slice(0, 3).join(", "))}${c.venue ? " · " + esc(c.venue) : ""}
       <div class="meta">${esc(c.match_reason || "")}${c.doi ? " · doi:" + esc(c.doi) : ""}</div>
-      ${DATA.checks.misquote ? `<button data-ref="${esc(r.reference.id)}" data-cand="${i}">Use this match & run misquote check</button>` : ""}
+      ${DATA.checks.misquote ? `<button class="btn secondary small" data-ref="${esc(r.reference.id)}" data-cand="${i}">Use this match & run misquote check</button>` : ""}
     </div>`).join("");
-  return `<div class="ref static" id="fuzzy-${esc(r.reference.id)}">${refHeader(r)}${notes}
-    <div class="meta" style="margin-top:.5rem"><strong>Candidate works in OpenAlex:</strong></div>${cands}
+  return `<div class="panel ref static" id="fuzzy-${esc(r.reference.id)}">${refHeader(r)}${notes}
+    <h4 class="label">Candidate works in OpenAlex</h4>${cands}
     <div id="fuzzy-mq-${esc(r.reference.id)}"></div>
   </div>`;
 }
@@ -1138,9 +1041,9 @@ function downloadResults(fmt) {
     const trs = rows.map(r =>
       `<tr class="${r.Priority === "Review" ? "hi" : ""}">${cols.map(c => `<td>${esc(r[c])}</td>`).join("")}</tr>`).join("");
     const html = `<!doctype html><meta charset="utf-8"><title>Citation check ${stamp}</title>
-<style>body{font:14px system-ui,sans-serif;margin:2rem}table{border-collapse:collapse;width:100%}
-th,td{border:1px solid #ccc;padding:4px 8px;text-align:left;vertical-align:top;font-size:12px}
-th{background:#f0ede6}tr.hi td{background:#fbeeec}</style>
+<style>body{font:14px system-ui,sans-serif;margin:2rem;color:#26241f}table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #e2ddd2;padding:4px 8px;text-align:left;vertical-align:top;font-size:12px}
+th{background:#f6f4ef}tr.hi td{background:#f6dcd8}</style>
 <h1>Citation check</h1><p>${rows.length} references · generated ${stamp}</p>
 <table><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
     saveBlob(html, `citation-check-${stamp}.html`, "text/html");

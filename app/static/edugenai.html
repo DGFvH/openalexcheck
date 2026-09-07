@@ -15,64 +15,39 @@
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
 <link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="stylesheet" href="/static/ui.css">
 <style>
-  :root {
-    --bg: #f6f4ef; --card: #ffffff; --ink: #26241f; --muted: #6f6a5f;
-    --accent: #1f6f5c; --border: #e2ddd2; --code-bg: #2b2a27; --code-ink: #f3efe6;
-  }
-  * { box-sizing: border-box; }
-  /* One sans family throughout (matching the main page); the brand title is the
-     only serif accent. */
-  body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--ink); line-height: 1.5; }
-  header { max-width: min(960px, 94%); margin: 0 auto; padding: 2.2rem 1.5rem 0.5rem; }
-  main { max-width: min(960px, 94%); margin: 0 auto; padding: 0 1.5rem 4rem; }
-  h1 { font-size: 1.7rem; margin: 0 0 .3rem; font-family: Georgia, "Times New Roman", serif; }
-  h1 em { color: var(--accent); font-style: italic; }
-  /* Credit block centres vertically against the title so the © line and the
-     icon row sit balanced with the left-hand brand. */
+  /* Layout only — tokens and components come from ui.css. */
+  header.wrap { padding-top: 2rem; padding-bottom: .5rem; }
+  main.wrap, footer.wrap { padding-bottom: 3rem; }
   .header-top { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; margin-bottom: .5rem; }
-  .header-top h1 { margin: 0; }
-  .credit { text-align: right; font-size: .8rem; color: var(--muted); }
-  .credit-name { display: block; margin-bottom: .2rem; }
-  .credit-name a { color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
-  .credit-name a:hover { color: var(--accent); }
-  .credit-links { display: inline-flex; gap: .5rem; justify-content: flex-end; }
-  .credit-links a { color: var(--muted); display: inline-flex; transition: color .15s; }
+  .credit { text-align: right; font-size: var(--fs-sm); color: var(--muted); }
+  .credit-name { display: block; }
+  .credit-name a { color: var(--muted); }
+  .credit-links { display: inline-flex; gap: .5rem; justify-content: flex-end; margin-top: .25rem; }
+  .credit-links a { color: var(--muted); display: inline-flex; }
   .credit-links a:hover { color: var(--accent); }
-  h2 { font-size: 1.25rem; margin: 2.2rem 0 .6rem; border-bottom: 2px solid var(--border); padding-bottom: .3rem; }
-  h3 { font-size: 1.02rem; margin: 1.4rem 0 .3rem; }
-  p, li { font-size: 1rem; }
+  h2 { border-bottom: 1px solid var(--border); padding-bottom: .25rem; }
   .sub { color: var(--muted); margin: 0 0 1rem; }
-  .topbar { display: flex; gap: .7rem; flex-wrap: wrap; align-items: center; margin-top: 1rem; font-family: system-ui, sans-serif; }
-  a.btn { display: inline-block; background: var(--accent); color: #fff; text-decoration: none; padding: .55rem 1.1rem; border-radius: 7px; font-size: .9rem; }
-  a.btn.ghost { background: #fff; color: var(--accent); border: 1px solid var(--accent); }
-  a.back { color: var(--accent); font-family: system-ui, sans-serif; font-size: .88rem; text-decoration: none; }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.1rem 1.4rem; margin: 1rem 0; }
-  .flow { font-family: system-ui, sans-serif; font-size: .9rem; }
-  .flow table { border-collapse: collapse; width: 100%; }
-  .flow th, .flow td { text-align: left; padding: .45rem .6rem; border-top: 1px solid var(--border); vertical-align: top; }
-  .flow th { color: var(--muted); font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; }
+  .topbar { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; margin-top: 1rem; }
+  a.back { display: inline-block; font-size: var(--fs-sm); text-decoration: none; margin-bottom: .75rem; }
+  .card { margin: 1rem 0; }
+  .flow { font-size: var(--fs-sm); }
+  .flow th { text-align: left; }
   ol.steps { counter-reset: step; list-style: none; padding: 0; }
-  ol.steps > li { position: relative; padding: 0 0 1.3rem 3rem; }
-  ol.steps > li::before {
-    counter-increment: step; content: counter(step);
-    position: absolute; left: 0; top: 0; width: 2rem; height: 2rem; border-radius: 50%;
-    background: var(--accent); color: #fff; font-family: system-ui, sans-serif; font-weight: 700;
-    display: flex; align-items: center; justify-content: center; font-size: .95rem;
-  }
+  ol.steps > li { position: relative; padding: 0 0 1.25rem 3rem; }
+  ol.steps > li::before { counter-increment: step; content: counter(step); position: absolute; left: 0; top: 0; width: 2rem; height: 2rem; border-radius: var(--r-pill); background: var(--accent); color: var(--card); font-weight: 600; display: flex; align-items: center; justify-content: center; }
   ol.steps > li h3 { margin-top: .15rem; }
-  code.inline { background: #ece7db; padding: .1rem .35rem; border-radius: 4px; font-size: .9em; }
-  .codewrap { position: relative; margin: .7rem 0; }
-  pre { background: var(--code-bg); color: var(--code-ink); border-radius: 8px; padding: 1rem 1.1rem; overflow-x: auto; font-size: .82rem; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; line-height: 1.5; }
-  .copy { position: absolute; top: .5rem; right: .5rem; background: #ffffff22; color: #fff; border: 1px solid #ffffff44; border-radius: 5px; font-family: system-ui, sans-serif; font-size: .72rem; padding: .25rem .55rem; cursor: pointer; }
-  .copy:hover { background: #ffffff33; }
-  .field-label { font-family: system-ui, sans-serif; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-top: .6rem; }
-  .note { font-family: system-ui, sans-serif; font-size: .86rem; background: #fbf7ec; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: .6rem .9rem; margin: .8rem 0; }
-  footer { max-width: min(960px, 94%); margin: 0 auto; padding: 1.5rem; color: var(--muted); font-family: system-ui, sans-serif; font-size: .82rem; }
+  .codewrap { position: relative; margin: .75rem 0; }
+  .copy { position: absolute; top: .5rem; right: .5rem; background: var(--muted); color: #fff; border: 0; border-radius: var(--r); font: inherit; font-size: var(--fs-xs); font-weight: 600; padding: .25rem .6rem; cursor: pointer; }
+  .copy:hover { background: var(--accent); }
+  .field-label { display: block; font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: .75rem; }
+  .note { font-size: var(--fs-sm); margin: .75rem 0; }
+  footer { color: var(--muted); font-size: var(--fs-sm); }
 </style>
 </head>
 <body>
-<header>
+<header class="wrap">
   <a class="back" href="/">← Back to the Citation Checker</a>
   <div class="header-top" style="margin-top:.6rem">
     <h1>Use the Citation Checker <em>in EduGenAI</em></h1>
@@ -100,23 +75,23 @@
   </div>
   <p class="sub">Register this tool as an EduGenAI <strong>Extension</strong> so the assistant can verify a paper's references against OpenAlex — inside your own EduGenAI chat, with no separate LLM key.</p>
   <div class="topbar">
-    <a class="btn" href="/static/edugenai-instructions.pdf" download>⬇ Download PDF version</a>
-    <a class="btn ghost" href="/">Open the standalone tool</a>
+    <a class="btn primary" href="/static/edugenai-instructions.pdf" download>⬇ Download PDF version</a>
+    <a class="btn secondary" href="/">Open the standalone tool</a>
   </div>
 </header>
-<main>
+<main class="wrap">
 
   <h2>How it works</h2>
   <p>An EduGenAI Extension is a <strong>function-calling tool</strong>: you give EduGenAI an HTTP endpoint and a function definition, and its assistant calls that endpoint (as a JSON request) whenever it needs to. This citation checker splits cleanly across the two sides:</p>
-  <div class="card flow">
-    <table>
+  <div class="panel card flow">
+    <table class="table">
       <tr><th>Step</th><th>Who does it</th></tr>
       <tr><td>Read the paper, pull out the reference list and the sentences that cite each source</td><td><strong>EduGenAI's assistant</strong> — the paper is already in its chat context</td></tr>
       <tr><td>Look each reference up in OpenAlex; check title, <strong>authors</strong>, year, journal, DOI, volume, issue, pages; return the abstract</td><td><strong>This extension endpoint</strong> — deterministic, no LLM</td></tr>
       <tr><td>Compare the citing sentence to the abstract and flag misquotes</td><td><strong>EduGenAI's assistant</strong>, using the abstract the endpoint returned</td></tr>
     </table>
   </div>
-  <div class="note">Because the reasoning stays on EduGenAI's side, <strong>the extension needs no LLM API key</strong>. It only wraps OpenAlex, which is free. (An optional OpenAlex Premium key can be stored securely in the Headers / Azure Key Vault section — see Step 3.)</div>
+  <div class="panel tone-info note">Because the reasoning stays on EduGenAI's side, <strong>the extension needs no LLM API key</strong>. It only wraps OpenAlex, which is free. (An optional OpenAlex Premium key can be stored securely in the Headers / Azure Key Vault section — see Step 3.)</div>
 
   <h2>Before you start</h2>
   <p>You need this app deployed at a public HTTPS URL — EduGenAI calls it server-to-server. Everywhere below, replace <code class="inline" id="host-token">https://YOUR-DEPLOYMENT-HOST</code> with your deployment's address.</p>
@@ -169,12 +144,12 @@ Then, if Step 1 found orphan citations, add a "Missing references" section: one 
 End with one summary line that does NOT hide problems inside "verified": "N references - X verified &amp; consistent, Y need review, Z fuzzy, W potential hallucinations, V in-text citations missing from the reference list." (Drop the last part when there are no orphans.) A reference that EXISTS but has a metadata mismatch or a misquote counts under "need review", never under "verified". If helpful, break Y down (e.g. "3 need review: 2 with wrong details, 1 cited out of context").
 
 Never invent a DOI, author, year, or verdict the function did not return. If "status" is "lookup_failed", say the reference could not be checked - do NOT call it a hallucination.</pre><button class="copy" data-for="c-detail">Copy</button></div>
-      <div class="note"><strong>Installed this extension before?</strong> The saved copy in EduGenAI does <em>not</em> update itself. If "start the extension" gets you a menu instead of a run, your extension still has an older Detail description — open it in the Extension builder and re-paste the block above.</div>
+      <div class="panel tone-info note"><strong>Installed this extension before?</strong> The saved copy in EduGenAI does <em>not</em> update itself. If "start the extension" gets you a menu instead of a run, your extension still has an older Detail description — open it in the Extension builder and re-paste the block above.</div>
     </li>
     <li>
       <h3>Add the Header</h3>
       <p>In the <strong>Headers</strong> section, add one header so the endpoint receives JSON:</p>
-      <div class="card flow"><table>
+      <div class="panel card flow"><table class="table">
         <tr><th>Key</th><th>Value</th></tr>
         <tr><td><code class="inline">Content-Type</code></td><td><code class="inline">application/json</code></td></tr>
       </table></div>
@@ -185,7 +160,7 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
       <p>Under <strong>Functions</strong>, add a function that points at the batch endpoint.</p>
       <p><span class="field-label">Method &amp; URL</span></p>
       <div class="codewrap"><pre id="c-url">POST  https://YOUR-DEPLOYMENT-HOST/api/verify_batch</pre><button class="copy" data-for="c-url">Copy</button></div>
-      <div class="note"><strong>If POST sends an empty body on your platform</strong> (see Troubleshooting), use <code class="inline">GET</code> with the same URL instead — the endpoint accepts the arguments in the query string too.</div>
+      <div class="panel tone-info note"><strong>If POST sends an empty body on your platform</strong> (see Troubleshooting), use <code class="inline">GET</code> with the same URL instead — the endpoint accepts the arguments in the query string too.</div>
       <p><span class="field-label">Function definition (name, description, JSON parameters)</span></p>
       <div class="codewrap"><pre id="c-schema">{
   "name": "verify_references",
@@ -216,7 +191,7 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
     "required": ["references"]
   }
 }</pre><button class="copy" data-for="c-schema">Copy</button></div>
-      <div class="note"><strong>Plan B — if the arguments never arrive</strong> (the Troubleshooting hint shows an empty body <em>and</em> an empty query string on both POST and GET): the platform's gateway cannot serialize the nested <code class="inline">references</code> array. Replace the function definition with this flat, single-string version — every gateway can transmit one string. The endpoint understands it natively; the assistant just passes the same reference array serialized as a JSON string.
+      <div class="panel tone-info note"><strong>Plan B — if the arguments never arrive</strong> (the Troubleshooting hint shows an empty body <em>and</em> an empty query string on both POST and GET): the platform's gateway cannot serialize the nested <code class="inline">references</code> array. Replace the function definition with this flat, single-string version — every gateway can transmit one string. The endpoint understands it natively; the assistant just passes the same reference array serialized as a JSON string.
       <div class="codewrap"><pre id="c-schema-b">{
   "name": "verify_references",
   "description": "Verify bibliographic references against OpenAlex. Call this whenever the user says 'start', 'start the extension', 'start the check', or asks to check, verify, or fact-check the citations or references in a paper. Pass the full reference list as ONE JSON string: an array of objects, each with title, authors (array of strings), et_al, year, doi, journal, volume, issue, pages. Returns, per reference: whether it exists (found / fuzzy / not_found), a field-by-field comparison against the real record, and the abstract.",
@@ -236,7 +211,7 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
       <h3>Submit and test</h3>
       <p>Click <strong>Submit</strong>. Then, in an EduGenAI chat, upload a paper and give a go-ahead — the assistant should extract the references itself and then call your endpoint. The <strong>most dependable prompt</strong> names the extension and the steps explicitly:</p>
       <div class="codewrap"><pre id="c-prompt">Use the execution steps in the verify_references extension in order to check the references in the attached pdf.</pre><button class="copy" data-for="c-prompt">Copy</button></div>
-      <div class="note"><strong>Why not just “start”?</strong> EduGenAI decides whether to call an extension from what you ask for, and a bare “start” often reads as a generic greeting — you get a menu instead of a run. The descriptions above tell it to treat “start” as a trigger, but the explicit prompt above works even when the platform's tool-selection is being obtuse.</div>
+      <div class="panel tone-info note"><strong>Why not just “start”?</strong> EduGenAI decides whether to call an extension from what you ask for, and a bare “start” often reads as a generic greeting — you get a menu instead of a run. The descriptions above tell it to treat “start” as a trigger, but the explicit prompt above works even when the platform's tool-selection is being obtuse.</div>
     </li>
   </ol>
 
@@ -287,12 +262,12 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
   ]
 }</pre><button class="copy" data-for="c-resp">Copy</button></div>
 
-  <div class="note"><strong>A single-reference endpoint</strong> is also available at <code class="inline">POST /api/verify</code> — same fields, but without the outer <code class="inline">references</code> array — if you prefer one call per reference. The batch endpoint is recommended for a whole bibliography (one round trip, kinder to OpenAlex's rate limits).</div>
+  <div class="panel tone-info note"><strong>A single-reference endpoint</strong> is also available at <code class="inline">POST /api/verify</code> — same fields, but without the outer <code class="inline">references</code> array — if you prefer one call per reference. The batch endpoint is recommended for a whole bibliography (one round trip, kinder to OpenAlex's rate limits).</div>
 
   <h2>From JSON to a readable table — what you'll see in chat</h2>
   <p><strong>You never look at that JSON.</strong> It is the machine interface between EduGenAI and the endpoint. The <em>Detail description</em> you pasted in Step 2 tells EduGenAI's assistant to convert it (STEP 4) into a severity-sorted table with flags, scores, and the mismatches spelled out — mirroring how this site presents results. A typical chat answer looks like:</p>
-  <div class="card flow">
-    <table>
+  <div class="panel card flow">
+    <table class="table">
       <tr><th>#</th><th>Flag</th><th>Reference (as printed)</th><th>Status</th><th>Metadata issues</th><th>Misquote</th><th>What the paper is about</th></tr>
       <tr><td>3</td><td>🔴</td><td>Zorblatt, Q. (2021). Quantum blockchain effects on medieval cheese trading…</td><td>🔴 Potential hallucination</td><td>—</td><td>—</td><td>—</td></tr>
       <tr><td>2</td><td>🔴</td><td>Smith, J. &amp; Jones, B. (2019). Highly accurate protein structure prediction… Science, 100-110.</td><td>🟢 Verified</td><td><strong>authors:</strong> "Smith, Jones" → "Jumper, Evans…" · year: 2019 → 2021 · journal: Science → Nature</td><td>🔴 Mismatch — cited for labour productivity; paper is protein-structure AI</td><td>Deep-learning protein structure prediction</td></tr>
@@ -300,7 +275,7 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
     </table>
   </div>
   <p>…followed by a <em>Details</em> section for the flagged rows and a one-line summary count. The assistant does this conversion because the Detail description explicitly says the user must never see the raw JSON.</p>
-  <div class="note"><strong>If you still see raw JSON in the chat:</strong> the Detail description probably wasn't saved with the extension (re-check Step 2), or the platform truncated it. Two fixes: (1) re-paste the full Detail description; (2) as a per-chat override, end your request with — <em>“Present the results as a severity-sorted table with flags and the metadata mismatches spelled out; do not show raw JSON.”</em> The endpoint's JSON also ships ready-made display fields (<code class="inline">badge</code>, <code class="inline">severity</code>, <code class="inline">priority</code>, <code class="inline">mismatched_fields</code>) precisely so the assistant only has to lay them out, not compute them.</div>
+  <div class="panel tone-info note"><strong>If you still see raw JSON in the chat:</strong> the Detail description probably wasn't saved with the extension (re-check Step 2), or the platform truncated it. Two fixes: (1) re-paste the full Detail description; (2) as a per-chat override, end your request with — <em>“Present the results as a severity-sorted table with flags and the metadata mismatches spelled out; do not show raw JSON.”</em> The endpoint's JSON also ships ready-made display fields (<code class="inline">badge</code>, <code class="inline">severity</code>, <code class="inline">priority</code>, <code class="inline">mismatched_fields</code>) precisely so the assistant only has to lay them out, not compute them.</div>
 
   <h2>Troubleshooting — the extension returns <code class="inline">count: 0</code></h2>
   <p>Every response now carries an <code class="inline">api_version</code> field, and any response with zero results carries a <code class="inline">hint</code> field describing what the server actually received. Ask the assistant to show the raw output and read those two fields:</p>
@@ -345,15 +320,15 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
 
   <h2>What data passes through your server?</h2>
   <p>Because the extension calls <em>your</em> deployment, it helps to be precise about what actually travels there — and what does not.</p>
-  <div class="card flow">
-    <table>
+  <div class="panel card flow">
+    <table class="table">
       <tr><th>Data</th><th>Where it goes</th></tr>
       <tr><td>The paper's full text, the student's name, and the citing sentences</td><td><strong>Stay inside EduGenAI.</strong> The assistant keeps the citing sentences for its own misquote reasoning; they are never sent to your endpoint.</td></tr>
       <tr><td>Reference <strong>metadata</strong> only — title, authors, year, DOI, journal, volume, issue, pages</td><td>Sent to your <code class="inline">/api/verify_batch</code> endpoint, and (titles/DOIs) on to OpenAlex for the lookup.</td></tr>
       <tr><td>Any LLM key</td><td><strong>Not involved server-side at all</strong> — the reasoning runs on EduGenAI's model.</td></tr>
     </table>
   </div>
-  <div class="note"><strong>So, does “all data go through me”?</strong> No — only the bibliographic metadata of the references, and only in transit. The endpoint reads just those fields; the citing sentences aren't part of what the extension sends, and anything else that were included would be discarded unread (never logged or stored). <strong>Just the function call?</strong> Yes; that is the only thing that reaches your server. <strong>Is it logged?</strong> Not by this app — it is stateless (no database, no file writes) and never logs request bodies or keys. Whatever hosting stack or reverse proxy you deploy behind may keep its own access log (request line: method + path + status, not bodies) — that part is under your control, and you can turn it down.
+  <div class="panel tone-info note"><strong>So, does “all data go through me”?</strong> No — only the bibliographic metadata of the references, and only in transit. The endpoint reads just those fields; the citing sentences aren't part of what the extension sends, and anything else that were included would be discarded unread (never logged or stored). <strong>Just the function call?</strong> Yes; that is the only thing that reaches your server. <strong>Is it logged?</strong> Not by this app — it is stateless (no database, no file writes) and never logs request bodies or keys. Whatever hosting stack or reverse proxy you deploy behind may keep its own access log (request line: method + path + status, not bodies) — that part is under your control, and you can turn it down.
   <br><br><strong>One caveat about the OpenAlex Premium key:</strong> it is used per-request, never stored, and scrubbed from any error message this app returns. But when your endpoint calls OpenAlex, the key travels as a query parameter on the outbound URL — so if you run behind an <em>egress</em> proxy that logs full outbound URLs, it could appear there. If that matters, don't set a Premium key (the tool works fine without one) or use a proxy that redacts query strings.</div>
 
   <h2>Notes &amp; limits</h2>
@@ -365,7 +340,7 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
   </ul>
 
 </main>
-<footer>
+<footer class="wrap">
   <p>This page is served by the Citation Checker itself, at <code>/edugenai</code>. The PDF version contains the same instructions.</p>
 </footer>
 <script>
