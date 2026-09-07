@@ -26,7 +26,8 @@
   .credit a { color: var(--muted); }
   .credit a:hover { color: var(--accent); }
   .header-links { display: flex; align-items: center; gap: .75rem; }
-  h1.brand { color: var(--accent); }
+  h1.brand { color: var(--accent); letter-spacing: -.02em; position: relative; display: inline-block; padding-bottom: .35rem; text-shadow: 0 2px 0 var(--ok-bg); }
+  h1.brand::after { content: ""; position: absolute; left: 0; bottom: 0; width: 2.75rem; height: 4px; border-radius: var(--r-pill); background: var(--accent); }
   .credit-links { display: inline-flex; gap: .5rem; color: var(--muted); }
   .credit-links a { display: inline-flex; color: var(--muted); }
   .credit-links a:hover { color: var(--accent); }
@@ -209,7 +210,7 @@
   </div>
 </main>
 <footer class="wrap credit">
-  <span>© Daniël van Hemert · <a href="https://www.tinybase.nl" target="_blank" rel="noopener">Tinybase</a> · <a href="https://github.com/DGFvH/openalexcheck/blob/main/LICENSE" target="_blank" rel="noopener" title="PolyForm Noncommercial License 1.0.0">Noncommercial license</a></span>
+  <span>© Daniël van Hemert · <a href="https://www.tinybase.nl" target="_blank" rel="noopener">Tinybase</a></span>
 </footer>
 
 <script>
