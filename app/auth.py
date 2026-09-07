@@ -84,7 +84,7 @@ def clear_cookie(response) -> None:
 def login_page(next_path: str, error: bool = False, status: int = 200) -> HTMLResponse:
     msg = '<p class="err">Wrong password.</p>' if error else ""
     html = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Citation Checker · sign in</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>Phantocite · sign in</title>
 <link rel="stylesheet" href="/static/ui.css">
 <style>
   body {{ min-height: 100vh; display: grid; place-items: center; }}
@@ -93,7 +93,7 @@ def login_page(next_path: str, error: bool = False, status: int = 200) -> HTMLRe
   .btn {{ width: 100%; justify-content: center; margin-top: 1rem; }}
 </style></head><body>
 <form method="post" action="/login" class="panel">
-  <h3 style="margin-top:0">Citation Checker</h3>
+  <h3 style="margin-top:0;color:var(--accent)">Phantocite</h3>
   <p class="help">This instance is password-protected (temporary).</p>
   {msg}
   <input type="hidden" name="next" value="{escape(next_path, quote=True)}">
