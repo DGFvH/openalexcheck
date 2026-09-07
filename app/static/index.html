@@ -140,8 +140,6 @@
       <div>
         <label class="label" for="model_select">Model</label>
         <select id="model_select"></select>
-        <input type="text" id="model" class="hidden" autocomplete="off" placeholder="exact model id" style="margin-top:.5rem">
-        <div class="help" id="llm-note">Runs on the site owner's <span id="provider-name"></span> API key — nothing to paste.</div>
       </div>
     </div>
     <div class="checks">
@@ -215,8 +213,7 @@
 const $ = id => document.getElementById(id);
 let DATA = null;
 
-// Curated model lists per provider. The first entry is the default. The
-// backend accepts any model string, so "Custom…" reveals a free-text field.
+// Curated model lists per provider. The first entry is the default.
 const MODELS = {
   anthropic: [
     ["claude-sonnet-5", "Claude Sonnet 5 (recommended)"],
@@ -239,24 +236,14 @@ const PROVIDER_NAME = { anthropic: "Claude (Anthropic)", gemini: "Gemini (Google
 
 function populateModels() {
   const provider = document.body.dataset.provider || "anthropic";
-  $("provider-name").textContent = PROVIDER_NAME[provider] || provider;
   document.querySelectorAll(".provider-name-copy").forEach(el => el.textContent = PROVIDER_NAME[provider] || provider);
   const sel = $("model_select");
-  sel.innerHTML = (MODELS[provider] || MODELS.anthropic).map(([v, label]) => `<option value="${v}">${label}</option>`).join("")
-    + `<option value="__custom__">Custom…</option>`;
-  onModelChange();
+  sel.innerHTML = (MODELS[provider] || MODELS.anthropic).map(([v, label]) => `<option value="${v}">${label}</option>`).join("");
 }
 
-function onModelChange() {
-  const custom = $("model_select").value === "__custom__";
-  $("model").classList.toggle("hidden", !custom);
-  if (custom) $("model").focus();
-}
-
-// Effective model id sent to the backend ("" lets the backend pick its default).
+// Model id sent to the backend.
 function selectedModel() {
-  const v = $("model_select").value;
-  return v === "__custom__" ? $("model").value.trim() : v;
+  return $("model_select").value;
 }
 
 const STATUS_LABEL = { found: "Verified", fuzzy: "Fuzzy match", not_found: "Potential hallucination", lookup_failed: "Lookup failed" };
@@ -270,7 +257,6 @@ const statusChip = r => `<span class="chip ${STATUS_TONE[r.status] || ""}">${STA
 $("run").addEventListener("click", runAnalysis);
 $("stop").addEventListener("click", stopAnalysis);
 $("sample").addEventListener("click", showSample);
-$("model_select").addEventListener("change", onModelChange);
 $("tab-results").addEventListener("click", () => switchTab("results"));
 $("tab-fuzzy").addEventListener("click", () => switchTab("fuzzy"));
 $("downloads").querySelectorAll("button").forEach(b =>
