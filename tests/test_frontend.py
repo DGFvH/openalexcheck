@@ -177,6 +177,9 @@ def test_password_gate_in_browser(browser, base_url):
     assert page.locator("#llm-note").count() == 0 and page.locator("#model").count() == 0
     assert page.locator("#api_key").count() == 0 and page.locator("#provider").count() == 0
     assert "Custom" not in page.locator("#model_select").inner_text()
+    assert page.locator("#max_tokens").count() == 0 and page.locator("#openalex_key").count() == 0
+    assert "Advanced options" not in page.inner_text("#form-card")
+    assert "pages" in page.inner_text("#capacity-note") and "references" in page.inner_text("#capacity-note")
     assert page.is_visible("text=Log out")
     page.click("#sample")
     page.wait_for_timeout(500)

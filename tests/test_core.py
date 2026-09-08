@@ -1321,3 +1321,51 @@ def test_login_cookie_is_session_scoped():
     cookie = r.headers["set-cookie"].lower()
     assert "phantocite_auth=" in cookie and "max-age" not in cookie and "expires" not in cookie
     assert "httponly" in cookie and "samesite=lax" in cookie
+
+
+# The output-token cap is fixed server-side: a posted 'max_tokens' (old cached
+# page) is ignored and /api/compare is clamped to the same limit. The page
+# carries the capacity note with the server's numbers.
+def test_token_limit_is_fixed_server_side(monkeypatch):
+    from conftest import login
+    from fastapi.testclient import TestClient
+    from app import main
+    seen = {}
+
+    async def fake_stream(**kw):
+        seen.update(kw)
+        yield '{"type":"ready"}\n'
+
+    monkeypatch.setattr(main, "_run_stream", fake_stream)
+    client = login(TestClient(main.app))
+    r = client.post("/api/analyze", files={"file": ("p.pdf", b"x")},
+                    data={"check_hallucination": "true", "max_tokens": "64000",
+                          "openalex_key": "  "})
+    assert r.status_code == 200
+    assert seen["max_tokens"] == main.LLM_MAX_TOKENS == 12000
+    assert seen["openalex_key"] is None
+    assert main._clamp_tokens(64000) == main.LLM_MAX_TOKENS
+    assert main._clamp_tokens(10) == main.MIN_MAX_TOKENS
+    assert main._clamp_tokens("junk") == main.LLM_MAX_TOKENS
+
+    html = client.get("/").text
+    assert "Advanced options" not in html and 'id="max_tokens"' not in html
+    assert 'id="openalex_key"' not in html and "{{CAP_" not in html
+    note = html[html.index('id="capacity-note"'):html.index("</div>", html.index('id="capacity-note"'))]
+    assert f"{main.CAPACITY_NOTE_PAGES} pages" in note and f"{main.CAPACITY_NOTE_REFS} references" in note
+
+
+def test_long_document_warns_in_progress_log(monkeypatch):
+    from app import main
+    from app.llm import LLMClient
+    events = []
+    monkeypatch.setattr(main, "extract_text", lambda f, d: "x" * (main.LONG_DOC_CHARS + 1))
+    monkeypatch.setattr(main, "extract_references", lambda llm, text, max_tokens=0: ([], []))
+    import threading, time
+    control = main.RunControl(cancel=threading.Event(), deadline=time.monotonic() + 60)
+    main._pipeline(emit=lambda e: events.append(e), control=control,
+                   llm=LLMClient("openai", "sk-test"), filename="p.pdf", data=b"x",
+                   openalex_key=None, check_hallucination=True, check_misquote=False,
+                   max_tokens=1000, safe=str)
+    msgs = [e["message"] for e in events if e and e.get("type") == "progress"]
+    assert any("Long document" in m and "may be partial" in m for m in msgs)

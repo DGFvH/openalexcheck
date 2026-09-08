@@ -60,8 +60,8 @@ class LLMClient:
             if truncated:
                 raise LLMError(
                     "The model's reply was cut off at the token limit before the JSON "
-                    "finished. Raise 'Max output tokens per LLM call' (or split/shorten "
-                    "the document) and try again."
+                    "finished — the document is too long for one pass. Split it or "
+                    "shorten the reference list and try again."
                 )
             raise
 
@@ -84,8 +84,8 @@ class LLMClient:
             # Always stream: the SDK refuses a NON-streaming request whose
             # max_tokens could take longer than 10 minutes to generate ("Streaming
             # is required for operations that may take longer than 10 minutes").
-            # A large 'Max output tokens per LLM call' trips that ceiling, so we
-            # stream and accumulate the final message instead.
+            # A large max_tokens trips that ceiling, so we stream and accumulate
+            # the final message instead.
             with client.messages.stream(
                 model=self.model,
                 max_tokens=max_tokens,
@@ -108,7 +108,7 @@ class LLMClient:
             if truncated:
                 raise LLMError(
                     "The model spent the whole token budget before producing any answer. "
-                    "Raise 'Max output tokens per LLM call' and try again."
+                    "Try again, or split the document if it is very long."
                 )
             raise LLMError("Anthropic returned an empty response.")
         return text, truncated
@@ -167,7 +167,7 @@ class LLMClient:
         if not text and truncated:
             raise LLMError(
                 "The model spent the whole token budget before producing any answer. "
-                "Raise 'Max output tokens per LLM call' and try again."
+                "Try again, or split the document if it is very long."
             )
         return text, truncated
 
@@ -184,8 +184,8 @@ def _post_json(url: str, body: dict, headers: dict, provider: str,
         resp = httpx.post(url, json=body, headers=headers, timeout=timeout)
     except httpx.TimeoutException as exc:
         raise LLMError(
-            f"The {provider} API did not answer within {int(read)} s. Lower "
-            "'Max output tokens per LLM call', pick a faster model, or retry."
+            f"The {provider} API did not answer within {int(read)} s. Pick a "
+            "faster model, split a very long document, or retry."
         ) from exc
     except httpx.HTTPError as exc:
         raise LLMError(f"Could not reach the {provider} API: {exc}") from exc
@@ -246,6 +246,5 @@ def _parse_json(text: str) -> dict:
         except json.JSONDecodeError:
             pass
     raise LLMError(
-        "The model did not return valid JSON. Try again, raise the token limit, "
-        "or use a different model."
+        "The model did not return valid JSON. Try again, or use a different model."
     )

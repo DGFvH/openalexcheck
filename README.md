@@ -46,13 +46,14 @@ Besides the nicer UX, streaming keeps the connection alive with periodic
 heartbeats, so a long analysis can't be dropped by an idle-connection timeout
 (the usual cause of a browser "Failed to fetch").
 
-OpenAlex needs no API key by default; an optional field accepts an
-[OpenAlex Premium](https://openalex.org/pricing) API key for higher rate
-limits. The LLM runs on the key you paste in the form.
+OpenAlex needs no API key (the site's `OPENALEX_MAILTO` puts it in the polite
+pool). The LLM runs on the server's key.
 
-**Max output tokens** per LLM call is customizable in the form (default
-16000, range 1000–64000). Raise it for very long bibliographies; lower it to
-cap cost.
+**Capacity.** The output-token cap per LLM call is fixed server-side
+(`LLM_MAX_TOKENS`, default 12000) and sized to the analysis time budget
+(`ANALYSIS_BUDGET_S`, default 270 s): that comfortably covers a typical student
+paper of about 25 pages with around 30 references. Longer documents are
+analysed as far as the budget allows and the result is marked as partial.
 
 ## Run it
 
@@ -80,7 +81,8 @@ auto-deployed from `main`. Things the repo cannot set for you:
   per analysis, default 270; the run stops starting new work and reports
   `incomplete` in its final event), `OPENALEX_RPS` (request pacing, default 8),
   `RESOLVE_WORKERS` (parallel lookups per analysis, default 4),
-  `LLM_READ_TIMEOUT_CAP_S` (OpenAI/Gemini read-timeout cap, default 280).
+  `LLM_READ_TIMEOUT_CAP_S` (OpenAI/Gemini read-timeout cap, default 280),
+  `LLM_MAX_TOKENS` (output-token cap per LLM call, default 12000).
 - **Function max duration** (Vercel → Settings → Functions): set it above
   `ANALYSIS_BUDGET_S` + 30 s so the app's own budget always wins over the
   platform kill (which ends the stream silently).

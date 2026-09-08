@@ -43,10 +43,10 @@
   .checks label:has(input:checked) { border-color: var(--accent); background: var(--ok-bg); }
   .checks input { margin-top: .25rem; }
   .checks small { display: block; color: var(--muted); font-size: var(--fs-sm); }
-  details.advanced, details.privacy { margin-top: 1rem; font-size: var(--fs-sm); }
-  details.advanced > summary, details.privacy > summary { color: var(--accent); font-weight: 600; }
-  details.advanced > summary::before, details.privacy > summary::before { content: "▸ "; display: inline-block; transition: transform .15s; }
-  details.advanced[open] > summary::before, details.privacy[open] > summary::before { transform: rotate(90deg); }
+  details.privacy { margin-top: 1rem; font-size: var(--fs-sm); }
+  details.privacy > summary { color: var(--accent); font-weight: 600; }
+  details.privacy > summary::before { content: "▸ "; display: inline-block; transition: transform .15s; }
+  details.privacy[open] > summary::before { transform: rotate(90deg); }
   details.privacy ul { margin: .5rem 0 0; padding-left: 1.1rem; color: var(--muted); }
   details.privacy li { margin: .25rem 0; }
   .actions { display: flex; gap: .5rem; flex-wrap: wrap; margin-top: 1.5rem; }
@@ -137,6 +137,7 @@
   <div class="panel" id="form-card">
     <label class="label" for="file">Document (.pdf or .docx)</label>
     <input type="file" id="file" accept=".pdf,.docx">
+    <div class="help" id="capacity-note">Handles typical student papers — up to about {{CAP_PAGES}} pages with around {{CAP_REFS}} references. Longer documents are checked as far as the time budget allows and marked as partial.</div>
     <div class="grid">
       <div>
         <label class="label" for="model_select">Model</label>
@@ -149,21 +150,6 @@
       <label class="panel"><input type="checkbox" id="check_misquote" checked>
         <span><strong>2 · Misquote check</strong><small>Does the citing sentence match what the source's abstract says?</small></span></label>
     </div>
-    <details class="advanced">
-      <summary>Advanced options</summary>
-      <div class="grid">
-        <div>
-          <label class="label" for="openalex_key">OpenAlex API key (optional)</label>
-          <input type="password" id="openalex_key" autocomplete="new-password" spellcheck="false" placeholder="only needed for OpenAlex Premium">
-          <div class="help">OpenAlex works without a key. A Premium key is one-time use and never stored.</div>
-        </div>
-        <div>
-          <label class="label" for="max_tokens">Max output tokens per LLM call</label>
-          <input type="number" id="max_tokens" value="16000" min="1000" max="64000" step="1000">
-          <div class="help">Caps each model call. Raise it for very long bibliographies; lower it to control cost. 1000–64000.</div>
-        </div>
-      </div>
-    </details>
     <details class="privacy">
       <summary>What data leaves your machine?</summary>
       <ul>
@@ -430,8 +416,6 @@ async function runAnalysis() {
   const fd = new FormData();
   fd.append("file", file);
   fd.append("model", selectedModel());
-  fd.append("openalex_key", $("openalex_key").value.trim());
-  fd.append("max_tokens", $("max_tokens").value || "16000");
   fd.append("check_hallucination", wantHall);
   fd.append("check_misquote", wantMis);
 
@@ -944,7 +928,6 @@ function attachFuzzyHandlers() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             model: selectedModel(),
-            max_tokens: Number($("max_tokens").value) || 16000,
             items: [{ id: refId, title: cand.title, abstract: cand.abstract, contexts: r.reference.contexts }],
           }),
         });

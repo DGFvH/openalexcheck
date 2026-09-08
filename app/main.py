@@ -59,10 +59,20 @@ app.add_middleware(
 STATIC_DIR = Path(__file__).parent / "static"
 ABSTRACT_CAP = 3000  # trim abstracts in API responses to keep payloads small
 
-# Output-token cap per LLM call. Reasonable default; user-customizable.
-DEFAULT_MAX_TOKENS = 16000
+# Output-token cap per LLM call. Fixed server-side and sized to the analysis
+# wall-clock budget (ANALYSIS_BUDGET_S below): at Sonnet output speeds ~12k
+# tokens is about as much as the extraction pass can generate in time, and it
+# covers roughly 30-35 references with their citation contexts.
+LLM_MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "12000"))
 MIN_MAX_TOKENS = 1000
-MAX_MAX_TOKENS = 64000
+# What the form tells users the tool comfortably handles (one place, injected
+# into the page so the copy cannot drift from the numbers).
+CAPACITY_NOTE_PAGES = 25
+CAPACITY_NOTE_REFS = 30
+# Above this many extracted characters (~30+ pages) the progress log warns
+# that results may be partial.
+LONG_DOC_CHARS = 100_000
+CHARS_PER_PAGE = 3000
 
 
 @app.exception_handler(RequestValidationError)
@@ -112,7 +122,9 @@ def _page(name: str) -> HTMLResponse:
     html = ((STATIC_DIR / name).read_text(encoding="utf-8")
             .replace("<script", f'<script nonce="{nonce}"')
             .replace("{{LLM_PROVIDER}}", provider)
-            .replace("{{GATED}}", "1" if auth.gate_enabled() else ""))
+            .replace("{{GATED}}", "1" if auth.gate_enabled() else "")
+            .replace("{{CAP_PAGES}}", str(CAPACITY_NOTE_PAGES))
+            .replace("{{CAP_REFS}}", str(CAPACITY_NOTE_REFS)))
     csp = ("default-src 'self'; "
            f"script-src 'nonce-{nonce}' https://www.googletagmanager.com; "
            "style-src 'self' 'unsafe-inline'; "
@@ -222,11 +234,12 @@ async def _rate_limit(request: Request, call_next):
 
 
 def _clamp_tokens(value: int) -> int:
+    """Cap a caller-supplied token count at the server's fixed limit."""
     try:
         value = int(value)
     except (TypeError, ValueError):
-        return DEFAULT_MAX_TOKENS
-    return max(MIN_MAX_TOKENS, min(MAX_MAX_TOKENS, value))
+        return LLM_MAX_TOKENS
+    return max(MIN_MAX_TOKENS, min(LLM_MAX_TOKENS, value))
 
 
 @app.post("/api/analyze")
@@ -236,12 +249,13 @@ async def analyze(
     provider: str = Form(""),   # ignored — kept so a cached old page cannot 422
     api_key: str = Form(""),    # ignored — the key comes from the server env
     openalex_key: str = Form(""),
-    max_tokens: int = Form(DEFAULT_MAX_TOKENS),
     check_hallucination: bool = Form(False),
     check_misquote: bool = Form(False),
 ):
+    # A posted 'max_tokens' (old cached page) is simply ignored: the cap is
+    # fixed server-side (LLM_MAX_TOKENS) so a run always fits the time budget.
     openalex_key = openalex_key.strip()
-    max_tokens = _clamp_tokens(max_tokens)
+    max_tokens = LLM_MAX_TOKENS
     _, server_key = _llm_config()
 
     def safe(msg: object) -> str:
@@ -314,6 +328,12 @@ def _pipeline(*, emit: Callable[[Optional[dict]], None], control: RunControl, ll
         except ExtractionError as exc:
             emit({"type": "error", "detail": str(exc)})
             return
+        if len(text) > LONG_DOC_CHARS:
+            pages = round(len(text) / CHARS_PER_PAGE)
+            emit({"type": "progress", "stage": "read",
+                  "message": f"Long document (~{pages} pages) — the tool is sized for about "
+                             f"{CAPACITY_NOTE_PAGES} pages / {CAPACITY_NOTE_REFS} references, "
+                             "so results may be partial."})
         emit({"type": "progress", "stage": "extract",
               "message": "Extracting references + citation contexts with the LLM…"})
         refs, orphans = extract_references(llm, text, max_tokens=max_tokens)
@@ -444,7 +464,7 @@ class CompareRequest(BaseModel):
     provider: str = ""   # ignored — the LLM is configured server-side
     api_key: str = ""    # ignored
     model: str = ""
-    max_tokens: int = DEFAULT_MAX_TOKENS
+    max_tokens: int = LLM_MAX_TOKENS  # clamped to the server limit
     items: list[CompareItem]
 
 
@@ -741,7 +761,7 @@ def _run_batch(items: list, key: Optional[str]) -> list[dict]:
 # indistinguishable from a parsing failure on the current one.
 # Deployment marker, returned by the verify endpoints (and /api/echo). BUMP on
 # every deploy so "is production current?" stays answerable from a response.
-API_VERSION = "2026-09-03.10"
+API_VERSION = "2026-09-03.11"
 
 
 def _from_query(request: Request) -> tuple[list, Optional[str]]:
