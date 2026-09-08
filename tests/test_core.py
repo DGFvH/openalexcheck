@@ -1381,7 +1381,6 @@ def test_cookie_bar_and_consent_mode_on_both_pages():
         # GA starts with analytics cookies denied; the bar's buttons flip it.
         assert "gtag('consent', 'default', {analytics_storage: 'denied'" in html
         assert 'id="cookie-bar" hidden' in html
-        assert 'id="cookie-accept"' in html and 'id="cookie-decline"' in html
-        assert 'id="cookie-settings"' in html
+        assert 'id="cookie-accept"' in html and "Accept cookies" in html
         assert html.index("gtag('consent', 'default'") < html.index("gtag('config'")
     assert "session cookie" in client.get("/login").text

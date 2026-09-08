@@ -113,10 +113,10 @@ Both keys (LLM and optional OpenAlex) are strictly one-time use:
   logged. (Access logs do record query strings — which is why the keys travel
   in the body or the `X-OpenAlex-Key` header — and the httpx request-line
   logger, which would print the OpenAlex `api_key` parameter, is silenced.)
-- Cookies: signing in sets one essential session cookie. Google Analytics
-  (gtag.js) runs in Consent Mode — analytics cookies are set only after the
-  visitor allows them in the cookie bar (choice kept in localStorage); the
-  "Cookies" footer link reopens the bar.
+- Cookies: signing in sets one session cookie. Google Analytics (gtag.js)
+  runs in Consent Mode — its cookies are set once the visitor clicks "Accept
+  cookies" in the bar (remembered in localStorage). Analytics only ever sees
+  page views and usage, never document text, references, keys or results.
 - `GET /api/health` reports the live build (`api_version`, git sha) and whether
   OpenAlex requests go through the polite pool (`OPENALEX_MAILTO` set).
 - Every error message that leaves the server passes through a redaction

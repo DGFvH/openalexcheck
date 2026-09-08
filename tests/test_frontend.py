@@ -187,18 +187,15 @@ def test_password_gate_in_browser(browser, base_url):
     page.close()
 
 
-def test_cookie_bar_choice_is_remembered(browser, base_url):
+def test_cookie_bar_acceptance_is_remembered(browser, base_url):
     page = browser.new_page()
     _login(page, base_url)
     assert page.is_visible("#cookie-bar")
+    page.reload(wait_until="domcontentloaded")
+    assert page.is_visible("#cookie-bar")          # stays until accepted
     page.click("#cookie-accept")
     assert page.is_hidden("#cookie-bar")
     assert page.evaluate("localStorage.getItem('phantocite_cookies')") == "all"
     page.reload(wait_until="domcontentloaded")
-    assert page.is_hidden("#cookie-bar")
-    page.click("#cookie-settings")
-    assert page.is_visible("#cookie-bar")
-    page.click("#cookie-decline")
-    assert page.evaluate("localStorage.getItem('phantocite_cookies')") == "essential"
     assert page.is_hidden("#cookie-bar")
     page.close()
