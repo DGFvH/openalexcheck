@@ -62,7 +62,7 @@
   .progress-bar-track { height: 5px; background: var(--border); border-radius: var(--r-pill); margin: .5rem 0; overflow: hidden; }
   .progress-bar-fill { height: 100%; width: 0; background: var(--accent); transition: width .3s ease; }
   .progress-log { font-size: var(--fs-sm); color: var(--muted); max-height: 8.5rem; overflow-y: auto; }
-  .progress-log div.tick::before { content: "✓ "; color: var(--ok); }
+  .progress-log div.tick { color: var(--ink); }
   .error { color: var(--bad); font-size: var(--fs-sm); margin-top: 1rem; white-space: pre-wrap; }
   .tabs { display: flex; gap: .25rem; margin-top: 1.5rem; border-bottom: 1px solid var(--border); }
   .tabs button { background: none; border: 0; padding: .6rem 1rem; font: inherit; font-size: var(--fs-sm); font-weight: 600; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
@@ -78,32 +78,33 @@
   .ref[open] > summary { border-bottom: 1px solid var(--border); }
   .ref-line { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; min-width: 0; }
   .ref-line .refno { color: var(--muted); font-size: var(--fs-sm); }
-  .ref-line .title { font-size: var(--fs-sm); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 200px; min-width: 0; }
+  .ref-line .title { font-size: var(--fs-sm); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 200px; min-width: 0; }
   .ref-checks { grid-column: 1 / -1; display: flex; gap: .4rem; flex-wrap: wrap; }
   .ref-body { padding: .25rem 1.25rem 1.25rem; }
   .ref.static { padding: 1rem 1.25rem; }
   .raw { font-size: var(--fs-sm); padding: .6rem .9rem; margin-top: .25rem; overflow-wrap: anywhere; }
   .section { border-top: 1px solid var(--border); margin-top: 1rem; padding-top: .75rem; }
   .section > summary { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
-  .section > summary::before { content: "▸"; color: var(--muted); font-size: var(--fs-sm); transition: transform .15s; }
-  .section[open] > summary::before { transform: rotate(90deg); }
   .section > summary .label { margin: 0; }
-  .section > summary .hint { color: var(--muted); font-size: var(--fs-sm); flex-basis: 100%; }
+  /* One disclosure style for everything inside a card: ▸ + uppercase label. */
+  .ref details > summary::before, .fuzzy-card details > summary::before { content: "▸"; color: var(--muted); font-size: var(--fs-sm); display: inline-block; margin-right: .5rem; transition: transform .15s; }
+  .ref details[open] > summary::before, .fuzzy-card details[open] > summary::before { transform: rotate(90deg); }
   .section-body { padding-top: .5rem; }
   .meta, .note { font-size: var(--fs-sm); color: var(--muted); margin-top: .35rem; overflow-wrap: anywhere; }
-  .note { color: var(--warn); }
-  .field-note { font-size: var(--fs-sm); margin-top: .5rem; }
-  .field-note.bad { color: var(--bad); } .field-note.ok { color: var(--ok); }
+  .field-note { font-size: var(--fs-sm); color: var(--ink); margin-top: .5rem; }
+  .table td.status-plain { color: var(--muted); }
   .table tr.row-mismatch td:first-child { box-shadow: inset 3px 0 var(--bad); padding-left: .5rem; }
   .table-wrap { overflow-x: auto; margin-top: .5rem; }
   details.abstract { margin-top: .5rem; font-size: var(--fs-sm); }
-  details.abstract > summary { color: var(--accent); font-weight: 600; }
-  details.abstract > p { margin: .5rem 0 0; }
+  details.abstract > summary { font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  details.abstract > p { margin: .5rem 0 0; color: var(--muted); }
   .compare { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-top: .75rem; }
   @media (max-width: 700px) { .compare { grid-template-columns: 1fr; } }
   .compare .panel { font-size: var(--fs-sm); }
   .compare .panel p { margin: 0 0 .5rem; }
   .compare .label { margin: 0 0 .5rem; }
+  .compare .topic { font-weight: 600; margin: 0 0 .5rem; }
+  .compare .quote { color: var(--muted); }
   .verdict { margin-top: .5rem; font-size: var(--fs-sm); display: flex; gap: .5rem; align-items: flex-start; flex-wrap: wrap; }
   .cand { border-top: 1px dashed var(--border); margin-top: .75rem; padding-top: .75rem; font-size: var(--fs-sm); }
   .cand .btn { margin-top: .5rem; }
@@ -190,9 +191,9 @@
     <div class="summary-row">
       <div class="summary" id="summary"></div>
       <div class="downloads" id="downloads" style="display:none">
-        <button class="btn ghost small" data-fmt="csv">⬇ CSV</button>
-        <button class="btn ghost small" data-fmt="md">⬇ Markdown</button>
-        <button class="btn ghost small" data-fmt="html">⬇ HTML</button>
+        <button class="btn ghost small" data-fmt="csv">CSV</button>
+        <button class="btn ghost small" data-fmt="md">Markdown</button>
+        <button class="btn ghost small" data-fmt="html">HTML</button>
       </div>
     </div>
     <div id="orphans"></div>
@@ -265,10 +266,8 @@ function selectedModel() {
 const STATUS_LABEL = { found: "Verified", fuzzy: "Fuzzy match", not_found: "Potential hallucination", lookup_failed: "Lookup failed" };
 const VERDICT_LABEL = { match: "Consistent", likely_mismatch: "Likely mismatch", mismatch: "Mismatch", unclear: "Unclear" };
 // One chip component; these map server enums onto its four tones.
-const STATUS_TONE = { found: "ok", fuzzy: "warn", not_found: "bad", lookup_failed: "info" };
 const VERDICT_TONE = { match: "ok", likely_mismatch: "warn", mismatch: "bad", unclear: "info" };
 const FIELD_TONE = { match: "ok", close: "warn", mismatch: "bad", unverifiable: "info" };
-const statusChip = r => `<span class="chip ${STATUS_TONE[r.status] || ""}">${STATUS_LABEL[r.status] ?? esc(r.status)}</span>`;
 
 $("run").addEventListener("click", runAnalysis);
 $("stop").addEventListener("click", stopAnalysis);
@@ -427,7 +426,7 @@ function showSample() {
   finalize();
   const banner = document.createElement("div");
   banner.className = "panel tone-info banner sample-banner";
-  banner.innerHTML = "🧪 <strong>Sample output</strong> — an illustrative example using five real papers (three cited with errors, two clean). This is a static demo: no document or API key was used.";
+  banner.innerHTML = "<strong>Sample output</strong> — an illustrative example using five real papers (three cited with errors, two clean). This is a static demo: no document or API key was used.";
   $("screen-results").prepend(banner);
   $("results-area").scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -634,7 +633,7 @@ function renderOrphans() {
     <div class="panel tone-bad ref static orphan-card">
       <div class="ref-line"><span class="chip bad">Missing reference</span>
         <span class="refno">${items.length} in-text citation${items.length > 1 ? "s" : ""}</span></div>
-      <div class="meta">These sources are cited in the body but have <strong>no entry in the reference list</strong>, so they cannot be verified — the reference is missing (or the citation is misspelled).</div>
+      <div class="meta">These sources are cited in the body but have no entry in the reference list, so they cannot be verified — the reference is missing (or the citation is misspelled).</div>
       ${items.map(o => `<div class="orphan-item"><strong>${esc(o.label)}</strong>${o.context ? ` — <span class="meta-inline">“${esc(o.context)}”</span>` : ""}</div>`).join("")}
     </div>`;
 }
@@ -662,10 +661,10 @@ function updateSummary() {
     `<span class="chip soft ${tone}"${title ? ` title="${esc(title)}"` : ""}>${n} ${text}</span>`;
   $("summary").innerHTML =
     chip(results.length, results.length === 1 ? "reference" : "references", "") +
-    chip(clean, "verified", "ok") +
-    chip(flagged, "need review", flagged ? "warn" : "", "Exist in OpenAlex but need a human look" + reviewTip) +
+    (clean ? chip(clean, "verified", "ok") : "") +
+    (flagged ? chip(flagged, "need review", "warn", "Exist in OpenAlex but need a human look" + reviewTip) : "") +
     (fuzzy ? chip(fuzzy, "fuzzy", "warn") : "") +
-    chip(notFound, notFound === 1 ? "potential hallucination" : "potential hallucinations", notFound ? "bad" : "") +
+    (notFound ? chip(notFound, notFound === 1 ? "potential hallucination" : "potential hallucinations", "bad") : "") +
     (orphanCount ? chip(orphanCount, "missing from the reference list", "bad") : "") +
     (lookupFail ? chip(lookupFail, "not checked", "info") : "");
   $("fuzzy-count").textContent = fuzzy ? `(${fuzzy})` : "";
@@ -709,7 +708,7 @@ function finalize(opts) {
   if (PARTIAL) {
     const banner = document.createElement("div");
     banner.className = "panel tone-warn banner partial-banner";
-    banner.textContent = "⚠ " + partialMessage(opts);
+    banner.textContent = partialMessage(opts);
     $("screen-results").prepend(banner);
     ensureResultsVisible();
   }
@@ -752,11 +751,18 @@ function severity(r) {
   return s;
 }
 
-function sevChip(r) {
+// The ONE solid chip on a card: the overall verdict, worst of the two checks.
+// (Soft chips underneath carry the per-check detail; solid = overall, always.)
+function overallChip(r) {
+  if (r.status === "not_found") return `<span class="chip bad">Not found</span>`;
+  if (r.status === "lookup_failed") return `<span class="chip">Not checked</span>`;
   const s = severity(r);
-  if (s >= 70) return `<span class="chip soft bad">Review</span>`;
-  if (s >= 45) return `<span class="chip soft warn">Check</span>`;
-  return "";
+  if (s >= 70) return `<span class="chip bad">Review</span>`;
+  if (s >= 45 || r.status === "fuzzy") return `<span class="chip warn">Check</span>`;
+  const uv = usageVerdict(r);
+  if (uv && uv.cls === "muted") return `<span class="chip">${uv.label}</span>`;
+  if (uv && uv.cls === "warn") return `<span class="chip warn">Check</span>`;
+  return `<span class="chip ok">Verified</span>`;
 }
 
 // Per-section verdict shown on the always-visible summary bar, so a reader can
@@ -789,7 +795,7 @@ function refChecks(r) {
 function refSummary(r) {
   const ref = r.reference;
   return `<summary>
-      <span class="ref-line">${statusChip(r)}${sevChip(r)}
+      <span class="ref-line">${overallChip(r)}
         <span class="refno">#${esc(ref.id)}</span>
         <span class="title">${esc(ref.raw || ref.title || "(unlabelled reference)")}</span></span>
       <span class="ref-checks">${refChecks(r)}</span>
@@ -798,7 +804,7 @@ function refSummary(r) {
 
 function refHeader(r) {
   const ref = r.reference;
-  return `<div class="ref-line">${statusChip(r)}${sevChip(r)}<span class="refno">#${esc(ref.id)}</span></div>
+  return `<div class="ref-line">${overallChip(r)}<span class="refno">#${esc(ref.id)}</span></div>
     <h4 class="label">Reference — as printed in the paper</h4>
     <div class="panel inset raw">${esc(ref.raw || ref.title || "(unlabelled reference)")}</div>`;
 }
@@ -814,16 +820,17 @@ function renderFieldCheck(r) {
   const close = fields.filter(f => f.status === "close");
   let head;
   if (mism.length) {
-    head = `<div class="field-note bad">⚠ Mismatch on ${mism.map(f => FIELD_LABEL[f.field] || esc(f.field)).join(", ")} — the work exists, but these printed details differ from the OpenAlex record.</div>`;
+    head = `<div class="field-note">Mismatch on ${mism.map(f => FIELD_LABEL[f.field] || esc(f.field)).join(", ")} — the work exists, but these printed details differ from the OpenAlex record.</div>`;
   } else if (close.length) {
-    head = `<div class="field-note ok">✓ Printed details match the OpenAlex record, with ${close.length} minor naming variation${close.length > 1 ? "s" : ""} (${close.map(f => FIELD_LABEL[f.field] || esc(f.field)).join(", ")} — see table).</div>`;
+    head = `<div class="field-note">Printed details match the OpenAlex record, with ${close.length} minor naming variation${close.length > 1 ? "s" : ""} (${close.map(f => FIELD_LABEL[f.field] || esc(f.field)).join(", ")} — see table).</div>`;
   } else {
-    head = `<div class="field-note ok">✓ Title, authors, year, and other printed details match the OpenAlex record.</div>`;
+    head = `<div class="field-note">Title, authors, year, and other printed details match the OpenAlex record.</div>`;
   }
   const rows = fields.map(f => `
     <tr class="${f.status === "mismatch" ? "row-mismatch" : ""}">
       <td>${FIELD_LABEL[f.field] || esc(f.field)}</td>
-      <td><span class="chip soft ${FIELD_TONE[f.status] || ""}">${FIELD_STATUS_LABEL[f.status] || esc(f.status)}</span></td>
+      ${f.status === "match" ? '<td class="status-plain">match</td>'
+        : `<td><span class="chip soft ${FIELD_TONE[f.status] || ""}">${FIELD_STATUS_LABEL[f.status] || esc(f.status)}</span></td>`}
       <td>${esc(f.reference_value ?? "—")}</td>
       <td>${esc(f.openalex_value ?? "—")}</td>
     </tr>`).join("");
@@ -836,15 +843,14 @@ function renderFieldCheck(r) {
 // Summary bar for one collapsible part (Source / Usage). Shows the numbered
 // section title, its verdict chip, and the one-line hint.
 function partSummary(no, name, v, hint) {
-  return `<summary><span class="label">${no} · ${name}</span>
-      <span class="chip soft ${v.cls}">${v.label}</span>
-      <span class="hint">${hint}</span></summary>`;
+  return `<summary title="${esc(hint)}" aria-label="${esc(`${no} · ${name}: ${v.label}. ${hint}`)}"><span class="label">${no} · ${name}</span>
+      <span class="chip soft ${v.cls}">${v.label}</span></summary>`;
 }
 
 function renderSourceCheck(r) {
   const sv = sourceVerdict(r);
   const notes = (r.notes || []).filter(n => !/Metadata mismatch/.test(n))
-    .map(n => `<div class="note">⚠ ${esc(n)}</div>`).join("");
+    .map(n => `<div class="note">Note: ${esc(n)}</div>`).join("");
   let workLine = "";
   if (r.work) {
     workLine = `<div class="meta">Found in OpenAlex: <a href="${safeUrl(r.work.url)}" target="_blank" rel="noopener">${esc(r.work.title)}</a>
@@ -890,7 +896,7 @@ function renderMisquote(r) {
   let body;
   if (!m) {
     if (r.status === "found" && !FINALIZED)
-      body = `<div class="meta">⏳ Comparing the citation context against the abstract…</div>`;
+      body = `<div class="meta">Comparing the citation context against the abstract…</div>`;
     else if (r.status === "found")
       body = `<div class="meta">Usage check not run for this reference — the run ended before the comparison.</div>`;
     else
@@ -907,14 +913,12 @@ function renderMisquote(r) {
 
 function misquoteBlock(m, contexts, abstract) {
   let html = `<div class="verdict"><span class="chip ${VERDICT_TONE[m.verdict] || ""}">${VERDICT_LABEL[m.verdict] ?? esc(m.verdict)}</span><span>${esc(m.explanation || "")}</span></div>`;
-  if (m.paper_topic || m.student_usage) {
-    html += `<div class="meta">Student cites it as: <strong>${esc(m.student_usage || "?")}</strong> · Paper is actually about: <strong>${esc(m.paper_topic || "?")}</strong></div>`;
-  }
-  const left = contexts.length
-    ? contexts.map(c => `<p>“${esc(c)}”</p>`).join("")
+  let left = m.student_usage ? `<p class="topic">${esc(m.student_usage)}</p>` : "";
+  left += contexts.length
+    ? contexts.map(c => `<p class="quote">“${esc(c)}”</p>`).join("")
     : "<p class='meta'>Not cited in the body text.</p>";
-  let right = "";
-  if (m.abstract_summary) right += `<p>${esc(m.abstract_summary)}</p>`;
+  let right = m.paper_topic ? `<p class="topic">${esc(m.paper_topic)}</p>` : "";
+  if (m.abstract_summary) right += `<p class="quote">${esc(m.abstract_summary)}</p>`;
   if (abstract) right += `<details class="abstract"><summary>Full OpenAlex abstract</summary><p>${esc(abstract)}</p></details>`;
   if (!right) right = "<p class='meta'>No abstract available in OpenAlex.</p>";
   html += `<div class="compare">
@@ -925,7 +929,7 @@ function misquoteBlock(m, contexts, abstract) {
 }
 
 function renderFuzzy(r) {
-  const notes = (r.notes || []).map(n => `<div class="note">⚠ ${esc(n)}</div>`).join("");
+  const notes = (r.notes || []).map(n => `<div class="note">Note: ${esc(n)}</div>`).join("");
   const cands = (r.candidates || []).map((c, i) => `
     <div class="cand">
       <a href="${safeUrl(c.url)}" target="_blank" rel="noopener">${esc(c.title)}</a>
@@ -933,7 +937,7 @@ function renderFuzzy(r) {
       <div class="meta">${esc(c.match_reason || "")}${c.doi ? " · doi:" + esc(c.doi) : ""}</div>
       ${DATA.checks.misquote ? `<button class="btn secondary small" data-ref="${esc(r.reference.id)}" data-cand="${i}">Use this match & run misquote check</button>` : ""}
     </div>`).join("");
-  return `<div class="panel ref static" id="fuzzy-${esc(r.reference.id)}">${refHeader(r)}${notes}
+  return `<div class="panel ref static fuzzy-card" id="fuzzy-${esc(r.reference.id)}">${refHeader(r)}${notes}
     <h4 class="label">Candidate works in OpenAlex</h4>${cands}
     <div id="fuzzy-mq-${esc(r.reference.id)}"></div>
   </div>`;

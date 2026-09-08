@@ -184,6 +184,16 @@ def test_password_gate_in_browser(browser, base_url):
     page.click("#sample")
     page.wait_for_timeout(500)
     assert page.evaluate("document.querySelectorAll('#screen-results .ref').length") == 5
+    # One solid (overall) chip per card header; detail chips are all soft.
+    solid = page.evaluate("[...document.querySelectorAll('#screen-results .ref > summary')]"
+                          ".map(s => s.querySelectorAll('.chip:not(.soft)').length)")
+    assert solid == [1] * 5, solid
+    assert "🧪" not in page.inner_text(".sample-banner")
+    # Field table: matching rows carry no chip, only differing fields do.
+    page.evaluate("document.querySelectorAll('#screen-results details').forEach(d => d.open = true)")
+    assert page.evaluate("document.querySelectorAll('#screen-results .table td.status-plain').length") > 10
+    assert page.evaluate("document.querySelectorAll('#screen-results .table tr.row-mismatch .chip').length") == 3
+    assert page.evaluate("document.querySelectorAll('#screen-results .table tr:not(.row-mismatch) .chip.bad').length") == 0
     page.close()
 
 

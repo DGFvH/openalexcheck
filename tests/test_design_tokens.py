@@ -59,3 +59,19 @@ def test_pages_link_the_shared_stylesheet():
         assert '<link rel="stylesheet" href="/static/ui.css">' in (STATIC / name).read_text()
     from app import auth
     assert "/static/ui.css" in auth.login_page("/").body.decode()
+
+
+# Results screen: colour means verdict and lives only in chips and the field
+# table's left rule — never on prose; the only glyph is the ▸ disclosure marker.
+def test_results_prose_carries_no_verdict_colour_or_glyphs():
+    html = (STATIC / "index.html").read_text()
+    css = _style_blocks(html)
+    for rule in re.findall(r"([^{}]+){([^{}]*)}", css):
+        selector, body = rule[0].strip(), rule[1]
+        if re.search(r"color:\s*var\(--(ok|warn|bad)\)", body):
+            assert selector.startswith((".chip", ".btn", ".table", ".error", ".field-note-never")), \
+                f"verdict colour on prose: {selector}"
+    js = html[html.rindex("<script"):]
+    for glyph in "⚠✓⏳🧪⬇":
+        assert glyph not in js, f"glyph {glyph} in a results template"
+    assert "chip soft" in js and "overallChip" in js

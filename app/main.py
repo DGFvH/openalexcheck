@@ -761,7 +761,7 @@ def _run_batch(items: list, key: Optional[str]) -> list[dict]:
 # indistinguishable from a parsing failure on the current one.
 # Deployment marker, returned by the verify endpoints (and /api/echo). BUMP on
 # every deploy so "is production current?" stays answerable from a response.
-API_VERSION = "2026-09-03.13"
+API_VERSION = "2026-09-03.14"
 
 
 def _from_query(request: Request) -> tuple[list, Optional[str]]:
