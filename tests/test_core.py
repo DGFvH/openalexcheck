@@ -1369,3 +1369,19 @@ def test_long_document_warns_in_progress_log(monkeypatch):
                    max_tokens=1000, safe=str)
     msgs = [e["message"] for e in events if e and e.get("type") == "progress"]
     assert any("Long document" in m and "may be partial" in m for m in msgs)
+
+
+def test_cookie_bar_and_consent_mode_on_both_pages():
+    from conftest import login
+    from fastapi.testclient import TestClient
+    from app import main
+    client = login(TestClient(main.app))
+    for path in ("/", "/edugenai"):
+        html = client.get(path).text
+        # GA starts with analytics cookies denied; the bar's buttons flip it.
+        assert "gtag('consent', 'default', {analytics_storage: 'denied'" in html
+        assert 'id="cookie-bar" hidden' in html
+        assert 'id="cookie-accept"' in html and 'id="cookie-decline"' in html
+        assert 'id="cookie-settings"' in html
+        assert html.index("gtag('consent', 'default'") < html.index("gtag('config'")
+    assert "session cookie" in client.get("/login").text

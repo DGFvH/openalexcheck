@@ -8,6 +8,11 @@
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
+  // Consent Mode: analytics cookies stay off until the visitor allows them in
+  // the cookie bar (the choice is remembered in localStorage, nowhere else).
+  gtag('consent', 'default', {analytics_storage: 'denied', ad_storage: 'denied',
+                              ad_user_data: 'denied', ad_personalization: 'denied'});
+  try { if (localStorage.getItem('phantocite_cookies') === 'all') gtag('consent', 'update', {analytics_storage: 'granted'}); } catch (e) {}
   gtag('js', new Date());
   gtag('config', 'G-DXHMX17XQ1');
 </script>
@@ -150,13 +155,13 @@
       <label class="panel"><input type="checkbox" id="check_misquote" checked>
         <span><strong>2 · Misquote check</strong><small>Does the citing sentence match what the source's abstract says?</small></span></label>
     </div>
-    <details class="privacy">
+    <details class="privacy" id="privacy">
       <summary>What data leaves your machine?</summary>
       <ul>
         <li><strong>OpenAlex</strong> receives only reference <em>titles and DOIs</em> — never the paper's prose, the student's name, or any body text.</li>
         <li><strong>The configured LLM provider</strong> (<span class="provider-name-copy"></span>) receives the document text (needed to locate the reference list and citing sentences) and, for the misquote check, the citation snippets plus OpenAlex abstracts — nothing more. Requests run under the site owner's API key.</li>
         <li>All three providers state that data sent via an <em>API key</em> is <strong>not used to train their models</strong> by default.</li>
-        <li><strong>Google Analytics</strong> (gtag.js) is loaded on this page and receives anonymous page-view statistics — never your document, keys, or results.</li>
+        <li><strong>Cookies.</strong> Signing in sets one essential session cookie (it only keeps you signed in and expires when you close the browser). <strong>Google Analytics</strong> (gtag.js) may set cookies for anonymous page-view statistics <em>only if you allow analytics</em> in the cookie bar — never your document, keys, or results. Change your choice any time via "Cookies" in the footer.</li>
         <li>This tool stores nothing: no database, no file writes, no logs of your document or keys.</li>
       </ul>
     </details>
@@ -196,8 +201,33 @@
   </div>
 </main>
 <footer class="wrap credit">
-  <span>© Daniël van Hemert · <a href="https://www.tinybase.nl" target="_blank" rel="noopener">Tinybase</a></span>
+  <span>© Daniël van Hemert · <a href="https://www.tinybase.nl" target="_blank" rel="noopener">Tinybase</a> · <a href="#" id="cookie-settings">Cookies</a></span>
 </footer>
+<div class="cookie-bar" id="cookie-bar" hidden>
+  <span class="cookie-text">Phantocite uses one essential session cookie to keep you signed in and, only if you allow it, Google Analytics cookies for anonymous usage statistics. Your documents and results are never stored. <a href="/#privacy">Details</a></span>
+  <span class="cookie-actions">
+    <button class="btn secondary small" type="button" id="cookie-decline">Essentials only</button>
+    <button class="btn primary small" type="button" id="cookie-accept">Allow analytics</button>
+  </span>
+</div>
+<script>
+(function () {
+  var bar = document.getElementById("cookie-bar"), KEY = "phantocite_cookies";
+  function stored() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+  function choose(v) {
+    try { localStorage.setItem(KEY, v); } catch (e) {}
+    if (window.gtag) gtag("consent", "update", {analytics_storage: v === "all" ? "granted" : "denied"});
+    bar.hidden = true;
+  }
+  if (!stored()) bar.hidden = false;
+  document.getElementById("cookie-accept").addEventListener("click", function () { choose("all"); });
+  document.getElementById("cookie-decline").addEventListener("click", function () { choose("essential"); });
+  document.getElementById("cookie-settings").addEventListener("click", function (e) { e.preventDefault(); bar.hidden = false; });
+  // The bar's "Details" link points at the privacy disclosure; open it on arrival.
+  function openPrivacy() { var pv = document.getElementById("privacy"); if (pv && location.hash === "#privacy") pv.open = true; }
+  window.addEventListener("hashchange", openPrivacy); openPrivacy();
+})();
+</script>
 
 <script>
 const $ = id => document.getElementById(id);

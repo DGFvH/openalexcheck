@@ -8,6 +8,11 @@
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
+  // Consent Mode: analytics cookies stay off until the visitor allows them in
+  // the cookie bar (the choice is remembered in localStorage, nowhere else).
+  gtag('consent', 'default', {analytics_storage: 'denied', ad_storage: 'denied',
+                              ad_user_data: 'denied', ad_personalization: 'denied'});
+  try { if (localStorage.getItem('phantocite_cookies') === 'all') gtag('consent', 'update', {analytics_storage: 'granted'}); } catch (e) {}
   gtag('js', new Date());
   gtag('config', 'G-DXHMX17XQ1');
 </script>
@@ -344,8 +349,33 @@ Never invent a DOI, author, year, or verdict the function did not return. If "st
 </main>
 <footer class="wrap credit">
   <p class="small muted" style="flex-basis:100%;margin:0 0 .5rem">This page is served by Phantocite itself, at <code class="inline">/edugenai</code>. The PDF version contains the same instructions.</p>
-  <span>© Daniël van Hemert · <a href="https://www.tinybase.nl" target="_blank" rel="noopener">Tinybase</a></span>
+  <span>© Daniël van Hemert · <a href="https://www.tinybase.nl" target="_blank" rel="noopener">Tinybase</a> · <a href="#" id="cookie-settings">Cookies</a></span>
 </footer>
+<div class="cookie-bar" id="cookie-bar" hidden>
+  <span class="cookie-text">Phantocite uses one essential session cookie to keep you signed in and, only if you allow it, Google Analytics cookies for anonymous usage statistics. Your documents and results are never stored. <a href="/#privacy">Details</a></span>
+  <span class="cookie-actions">
+    <button class="btn secondary small" type="button" id="cookie-decline">Essentials only</button>
+    <button class="btn primary small" type="button" id="cookie-accept">Allow analytics</button>
+  </span>
+</div>
+<script>
+(function () {
+  var bar = document.getElementById("cookie-bar"), KEY = "phantocite_cookies";
+  function stored() { try { return localStorage.getItem(KEY); } catch (e) { return null; } }
+  function choose(v) {
+    try { localStorage.setItem(KEY, v); } catch (e) {}
+    if (window.gtag) gtag("consent", "update", {analytics_storage: v === "all" ? "granted" : "denied"});
+    bar.hidden = true;
+  }
+  if (!stored()) bar.hidden = false;
+  document.getElementById("cookie-accept").addEventListener("click", function () { choose("all"); });
+  document.getElementById("cookie-decline").addEventListener("click", function () { choose("essential"); });
+  document.getElementById("cookie-settings").addEventListener("click", function (e) { e.preventDefault(); bar.hidden = false; });
+  // The bar's "Details" link points at the privacy disclosure; open it on arrival.
+  function openPrivacy() { var pv = document.getElementById("privacy"); if (pv && location.hash === "#privacy") pv.open = true; }
+  window.addEventListener("hashchange", openPrivacy); openPrivacy();
+})();
+</script>
 <script>
   // Show the real deployment host in the copyable snippets when served live.
   (function () {

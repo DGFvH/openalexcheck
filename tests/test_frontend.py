@@ -185,3 +185,20 @@ def test_password_gate_in_browser(browser, base_url):
     page.wait_for_timeout(500)
     assert page.evaluate("document.querySelectorAll('#screen-results .ref').length") == 5
     page.close()
+
+
+def test_cookie_bar_choice_is_remembered(browser, base_url):
+    page = browser.new_page()
+    _login(page, base_url)
+    assert page.is_visible("#cookie-bar")
+    page.click("#cookie-accept")
+    assert page.is_hidden("#cookie-bar")
+    assert page.evaluate("localStorage.getItem('phantocite_cookies')") == "all"
+    page.reload(wait_until="domcontentloaded")
+    assert page.is_hidden("#cookie-bar")
+    page.click("#cookie-settings")
+    assert page.is_visible("#cookie-bar")
+    page.click("#cookie-decline")
+    assert page.evaluate("localStorage.getItem('phantocite_cookies')") == "essential"
+    assert page.is_hidden("#cookie-bar")
+    page.close()

@@ -94,7 +94,7 @@ def login_page(next_path: str, error: bool = False, status: int = 200) -> HTMLRe
 </style></head><body>
 <form method="post" action="/login" class="panel">
   <h3 style="margin-top:0;color:var(--accent)">Phantocite</h3>
-  <p class="help">This instance is password-protected (temporary).</p>
+  <p class="help">This instance is password-protected (temporary). Signing in sets one essential session cookie that only keeps you signed in; it expires when you close the browser.</p>
   {msg}
   <input type="hidden" name="next" value="{escape(next_path, quote=True)}">
   <label class="label" for="password">Password</label>

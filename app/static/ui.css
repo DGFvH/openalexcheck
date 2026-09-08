@@ -88,3 +88,9 @@ details > summary::-webkit-details-marker { display: none; }
 /* Code (EduGenAI page only — the one intentional second family). */
 code.inline { font-family: var(--mono); font-size: .9em; background: var(--border); padding: .1rem .35rem; border-radius: var(--r); }
 pre { font-family: var(--mono); font-size: var(--fs-sm); line-height: 1.5; background: var(--code-bg); color: var(--code-ink); border-radius: var(--r); padding: 1rem 1.1rem; overflow-x: auto; }
+
+/* Cookie bar: consent notice pinned to the bottom of the page. */
+.cookie-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .75rem 1.5rem; padding: .75rem 1.5rem; background: var(--card); border-top: 1px solid var(--border); font-size: var(--fs-sm); color: var(--ink); }
+.cookie-bar[hidden] { display: none; }
+.cookie-bar .cookie-text { flex: 1 1 28rem; max-width: 60rem; }
+.cookie-bar .cookie-actions { display: inline-flex; gap: .5rem; }
