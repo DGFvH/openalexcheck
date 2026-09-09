@@ -163,17 +163,28 @@ the misquote reasoning with the returned abstracts. An optional OpenAlex
 Premium key can be supplied via the `X-OpenAlex-Key` header (ideal for the
 extension's secure/Key-Vault header store).
 
-**eduGenAI 2** (`edugenai2.npuls.nl`) runs LibreChat, whose agents build tools
-from an OpenAPI schema rather than from a hand-written function definition, so
-the app publishes one at **`/openapi/edugenai.json`** (`app/toolspec.py`): a
-single operation, `verify_references`, with `servers` set to the live
-`SITE_URL` — LibreChat rejects an action whose domain differs from that. The
-app's own FastAPI schema is deliberately not used; it describes every route,
-including the browser-facing ones.
+**eduGenAI 2** (`edugenai2.npuls.nl`) takes external tools one way only: its
+Extensions panel accepts a *URL of MCP server*, and its Personas have no tools
+section at all. So the app runs an **MCP server** (Streamable HTTP) at
+**`/mcp`** — `app/mcp_server.py`, stateless, plain JSON rather than SSE, no
+`mcp` SDK dependency. It shares `_run_batch` in-process rather than calling
+`/api/verify_batch` over HTTP, which would cost a second function invocation
+and be counted against this deployment's own rate limit. `/mcp` is rate-limited
+like the other keyless endpoints.
 
-Step-by-step setup instructions (create an agent, paste the instructions, add
-the action) and a downloadable PDF are served at **`/edugenai`**, linked from
-the main page. To regenerate the PDF after editing the instructions:
+The same operation is also published as an **OpenAPI document** at
+**`/openapi/edugenai.json`** for platforms that import one instead (ChatGPT
+actions, other LibreChat builds). Both are rendered from one description in
+`app/toolspec.py`, so they cannot drift. The app's own FastAPI schema is
+deliberately not served; it describes every route, including the
+browser-facing ones.
+
+Registering the extension additionally requires Npuls to **whitelist the
+domain** (`edugenai@npuls.nl`) — nothing in this repo works around that.
+
+Step-by-step setup instructions (create the persona, paste the instructions,
+add the extension) and a downloadable PDF are served at **`/edugenai`**, linked
+from the main page. To regenerate the PDF after editing the instructions:
 
 ```bash
 pip install -r requirements-dev.txt

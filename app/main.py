@@ -39,7 +39,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, Respons
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import report, toolspec
+from . import mcp_server, report, toolspec
 from .analysis import compare_contexts, extract_references
 from .extract import ExtractionError, extract_text
 from .keysafety import redact
@@ -157,7 +157,7 @@ def index():
 # ---------------------------------------------------------------------------
 
 RATE_LIMITS = {"/api/analyze": (6, 60), "/api/verify_batch": (30, 60),
-               "/api/report.pdf": (20, 60), "*": (120, 60)}
+               "/api/report.pdf": (20, 60), "/mcp": (30, 60), "*": (120, 60)}
 
 
 class RateLimiter:
@@ -186,7 +186,9 @@ _LIMITER = RateLimiter(RATE_LIMITS)
 @app.middleware("http")
 async def _rate_limit(request: Request, call_next):
     path = request.url.path
-    limited = path.startswith("/api/") and path != "/api/health"
+    # /mcp is not under /api/ but reaches the same OpenAlex budget, so it is
+    # limited too — it is open and unauthenticated like the rest.
+    limited = (path.startswith("/api/") and path != "/api/health") or path == "/mcp"
     if _LIMITER.enabled and limited:
         ip = ((request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
               or request.headers.get("x-real-ip")
@@ -747,7 +749,7 @@ def _run_batch(items: list, key: Optional[str]) -> list[dict]:
 # indistinguishable from a parsing failure on the current one.
 # Deployment marker, returned by the verify endpoints (and /api/echo). BUMP on
 # every deploy so "is production current?" stays answerable from a response.
-API_VERSION = "2026-09-03.21"
+API_VERSION = "2026-09-03.22"
 
 
 def _from_query(request: Request) -> tuple[list, Optional[str]]:
@@ -809,8 +811,9 @@ async def api_verify_batch(request: Request, x_openalex_key: Optional[str] = Hea
     references, body_key = _normalize_batch(payload)
     if not references:
         references, body_key = _from_query(request)
-    if len(references) > 200:
-        raise HTTPException(400, "Too many references in one request (max 200).")
+    if len(references) > toolspec.MAX_REFERENCES:
+        raise HTTPException(400, "Too many references in one request "
+                                 f"(max {toolspec.MAX_REFERENCES}).")
     key = (x_openalex_key or body_key or "").strip() or None
     items = list(enumerate(references, 1))
     try:
@@ -823,6 +826,23 @@ async def api_verify_batch(request: Request, x_openalex_key: Optional[str] = Hea
     if not results:
         resp["hint"] = _shape_hint(payload, request)
     return resp
+
+
+async def _mcp_verify(references: list, request: Request) -> dict:
+    """The MCP tool's body, run in-process rather than over HTTP to our own
+    route: a self-call would cost a second function invocation and would be
+    counted against this deployment's own rate-limit bucket."""
+    key = (request.headers.get("x-openalex-key") or "").strip() or None
+    items = list(enumerate(references, 1))
+    try:
+        results = await asyncio.to_thread(_run_batch, items, key)
+    except OpenAlexAuthError as exc:
+        # A configuration problem, not a protocol one: let the tool report it.
+        raise RuntimeError(redact(str(exc), key)) from None
+    return {"count": len(results), "results": results, "api_version": API_VERSION}
+
+
+app.include_router(mcp_server.build_router(verify=_mcp_verify))
 
 
 _SENSITIVE_NAME = re.compile(r"key|token|secret|auth|password|cookie", re.I)

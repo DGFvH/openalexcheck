@@ -1466,10 +1466,13 @@ def test_edugenai_page_documents_the_new_flow():
     from fastapi.testclient import TestClient
     from app import main
     html = TestClient(main.app).get("/edugenai").text
-    assert f"{main.SITE_URL}/openapi/edugenai.json" in html
-    assert "Agent Builder" in html and "Add Action" in html
-    assert "Temporarily offline" not in html and "Extension builder</strong>" not in html
+    assert f"{main.SITE_URL}/mcp" in html          # the URL you register
+    assert "Add extension" in html and "Streamable HTTP" in html
+    assert "whitelist" in html and "edugenai@npuls.nl" in html   # the blocker, up front
+    assert "Temporarily offline" not in html and "Add Action" not in html
     assert "verify_references" in html
+    # the OpenAPI document is still offered, for platforms that import one
+    assert f"{main.SITE_URL}/openapi/edugenai.json" in html
 
 
 # Terms of use: reachable, linked from where a document is uploaded, and the
@@ -1501,3 +1504,107 @@ def test_no_auto_generated_openapi_inventory():
     assert client.get("/docs").status_code == 404
     # The one schema meant to be consumed is still published.
     assert client.get("/openapi/edugenai.json").status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# MCP server — eduGenAI 2's Extensions panel accepts only an MCP server URL,
+# so this is the integration that has a consumer. Protocol details matter:
+# a client that trips on one of them silently shows no tool at all.
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def mcp(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app import main
+    monkeypatch.setattr(main, "_run_batch",
+                        lambda items, key: [{"index": i, "status": "found", "badge": "Verified"}
+                                            for i, _ in items])
+    client = TestClient(main.app)
+
+    def rpc(**message):
+        message.setdefault("jsonrpc", "2.0")
+        return client.post("/mcp", json=message)
+
+    rpc.client = client
+    return rpc
+
+
+def test_mcp_handshake_and_tool_listing(mcp):
+    from app import toolspec
+    r = mcp(id=1, method="initialize", params={"protocolVersion": "2025-03-26"}).json()["result"]
+    assert r["protocolVersion"] == "2025-03-26"          # a supported version is echoed back
+    assert r["serverInfo"]["name"] == "phantocite"
+    assert "tools" in r["capabilities"] and r["instructions"]
+    unknown = mcp(id=1, method="initialize", params={"protocolVersion": "1999-01-01"}).json()
+    assert unknown["result"]["protocolVersion"] == "2025-06-18"   # falls back to the latest
+
+    tools = mcp(id=2, method="tools/list").json()["result"]["tools"]
+    assert len(tools) == 1 and tools[0]["name"] == "verify_references"
+    schema = tools[0]["inputSchema"]
+    # Drift guard: the MCP tool and the OpenAPI operation share one description.
+    assert schema["properties"]["references"]["items"]["properties"] == toolspec.REFERENCE_PROPERTIES
+    assert schema["properties"]["references"]["maxItems"] == toolspec.MAX_REFERENCES
+    assert tools[0]["description"] == toolspec.OPERATION_DESCRIPTION
+    assert mcp(id=3, method="ping").json()["result"] == {}
+
+
+def test_mcp_tool_call_returns_results(mcp):
+    r = mcp(id=1, method="tools/call",
+            params={"name": "verify_references",
+                    "arguments": {"references": [{"title": "A"}, {"title": "B"}]}}).json()["result"]
+    assert r["isError"] is False
+    assert r["structuredContent"]["count"] == 2
+    assert json.loads(r["content"][0]["text"]) == r["structuredContent"]
+    # A gateway that flattens the array into a JSON string is still understood.
+    s = mcp(id=2, method="tools/call",
+            params={"name": "verify_references",
+                    "arguments": {"references": '[{"title": "A"}]'}}).json()["result"]
+    assert s["isError"] is False and s["structuredContent"]["count"] == 1
+
+
+def test_mcp_tool_failures_are_results_not_protocol_errors(mcp):
+    """The model has to see why a call failed, so failures come back as tool
+    results with isError, never as JSON-RPC errors or 500s."""
+    from app import toolspec
+    for arguments in ({"references": []}, {}, {"references": "not json"},
+                      {"references": [{"title": "x"}] * (toolspec.MAX_REFERENCES + 1)}):
+        body = mcp(id=1, method="tools/call",
+                   params={"name": "verify_references", "arguments": arguments}).json()
+        assert "error" not in body, arguments
+        assert body["result"]["isError"] is True, arguments
+    unknown = mcp(id=2, method="tools/call", params={"name": "nope", "arguments": {}}).json()
+    assert unknown["result"]["isError"] is True
+
+
+def test_mcp_transport_details(mcp):
+    # Notifications get no reply; `id: 0` is a request, not a notification.
+    assert mcp(method="notifications/initialized").status_code == 202
+    assert mcp(id=0, method="ping").json()["id"] == 0
+    # Batches (allowed in 2025-03-26) and malformed input.
+    batch = mcp.client.post("/mcp", json=[{"jsonrpc": "2.0", "id": 1, "method": "ping"},
+                                          {"jsonrpc": "2.0", "method": "notifications/x"}])
+    assert batch.status_code == 200 and len(batch.json()) == 1
+    assert mcp.client.post("/mcp", content=b"{not json").json()["error"]["code"] == -32700
+    assert mcp(id=1, method="does/not/exist").json()["error"]["code"] == -32601
+    # No server-initiated stream; nothing to tear down.
+    assert mcp.client.get("/mcp").status_code == 405
+    assert mcp.client.delete("/mcp").status_code == 204
+    # Empty lists rather than errors for the capabilities we do not advertise.
+    for method, key in (("resources/list", "resources"), ("prompts/list", "prompts")):
+        assert mcp(id=1, method=method).json()["result"][key] == []
+
+
+def test_mcp_endpoint_is_rate_limited():
+    """/mcp sits outside /api/, but reaches the same OpenAlex budget."""
+    from fastapi.testclient import TestClient
+    from app import main
+    assert "/mcp" in main.RATE_LIMITS
+    limiter = main.RateLimiter({"/mcp": (2, 60), "*": (100, 60)}, enabled=True)
+    client = TestClient(main.app)
+    main._LIMITER, saved = limiter, main._LIMITER
+    try:
+        codes = [client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "ping"}).status_code
+                 for _ in range(3)]
+    finally:
+        main._LIMITER = saved
+    assert codes == [200, 200, 429]

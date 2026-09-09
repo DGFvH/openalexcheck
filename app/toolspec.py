@@ -1,13 +1,13 @@
-"""The OpenAPI document eduGenAI 2 imports to build its Action.
+"""One shared description of the reference-checking tool.
 
-eduGenAI 2 runs LibreChat, whose Agents create tools from an OpenAPI schema
-(rather than from the hand-written function JSON eduGenAI 1 used). LibreChat
-requires `servers` and an `operationId`, and checks that the action's domain
-matches the server URL — so the document is generated with the live base URL
-instead of being a static file that could drift.
+`app/mcp_server.py` renders it as an MCP tool — the only kind eduGenAI 2's
+Extensions panel accepts — and `openapi_document()` renders the same operation
+as an OpenAPI document for platforms that import one instead (ChatGPT actions,
+other LibreChat builds). Keeping both from one source means the two can never
+describe different arguments.
 
 Deliberately minimal: one operation. The app's own FastAPI-generated schema
-describes every route, including the browser-facing ones, which would give the
+describes every route, including the browser-facing ones, which would give an
 agent tools it must never call.
 
 OpenAPI 3.0.3 rather than 3.1: it is what LibreChat's own example uses, and it
@@ -16,6 +16,9 @@ rather than referenced through `components`, so no $ref resolution is needed.
 """
 
 from __future__ import annotations
+
+# Cap on one batch, shared by the HTTP route, the OpenAPI schema and the MCP tool.
+MAX_REFERENCES = 200
 
 REFERENCE_PROPERTIES = {
     "title": {"type": "string", "description": "The work's title, exactly as printed."},
@@ -151,8 +154,8 @@ def openapi_document(base_url: str, version: str) -> dict:
                                         "references": {
                                             "type": "array",
                                             "description": ("Every entry in the paper's reference list. "
-                                                            "At most 200 per call."),
-                                            "maxItems": 200,
+                                                            f"At most {MAX_REFERENCES} per call."),
+                                            "maxItems": MAX_REFERENCES,
                                             "items": {
                                                 "type": "object",
                                                 "required": ["title"],

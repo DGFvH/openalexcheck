@@ -52,7 +52,11 @@ NOTE = ParagraphStyle("NOTE", parent=BODY, backColor=HexColor("#fbf7ec"),
                       leftIndent=2, spaceBefore=4, spaceAfter=8)
 
 HOST = "https://www.phantocite.com"
+MCP_URL = f"{HOST}/mcp"
 SCHEMA_URL = f"{HOST}/openapi/edugenai.json"
+MCP_CURL = ("curl -s -X POST " + MCP_URL + " \\\n"
+            '  -H "Content-Type: application/json" \\\n'
+            '  -d \'{"jsonrpc":"2.0","id":1,"method":"tools/list"}\'')
 
 # Pasted verbatim into the agent's Instructions field. Kept identical to the
 # block on /edugenai (id="c-detail") — that page is the authoritative copy.
@@ -99,85 +103,101 @@ def build():
     story.append(Paragraph(
         "eduGenAI 1 was withdrawn after vulnerabilities were found in an audit, and its "
         "Extension builder went with it. eduGenAI 2 (edugenai2.npuls.nl, sign in with SRAM) "
-        "is built on LibreChat, where an assistant gains a tool from an OpenAPI schema "
-        "instead of a hand-written function definition. These steps are for that.", NOTE))
+        "takes external tools one way only: Extensions &rarr; URL of MCP server. Its Personas "
+        "have no tools section at all. So this app runs an MCP server, and you register "
+        "its URL.", NOTE))
+    story.append(Paragraph(
+        "<b>Read this first: the domain must be whitelisted.</b> The extension form says so "
+        "outright — an MCP URL on a domain Npuls has not allowed cannot be registered at all. "
+        "Mail edugenai@npuls.nl and ask them to whitelist www.phantocite.com for use as an "
+        "extension. Nothing on this side works around it, so start that email before the "
+        "steps below.", NOTE))
 
     story.append(Paragraph("How it works", H2))
+    story.append(Paragraph(
+        "Two separate objects on the platform. A Persona is a saved assistant with its own "
+        "instructions and model. An Extension is a connection to an MCP server. You create "
+        "both, then switch the extension on in a chat.", BODY))
     story.append(bullets(
-        "<b>The agent</b> reads the paper, extracts the reference list and the sentences "
+        "<b>The persona</b> reads the paper, extracts the reference list and the sentences "
         "that cite each source, judges whether each citation matches the source, and "
         "writes the report.",
-        "<b>This action's endpoint</b> looks each reference up in OpenAlex and checks "
+        "<b>This MCP server</b> looks each reference up in OpenAlex and checks "
         "title, authors, year, journal, DOI, volume, issue and pages — deterministically, "
         "with no LLM — and returns the abstract.",
     ))
     story.append(Paragraph(
-        "Because the reasoning stays on eduGenAI's side, the action needs no LLM API key. "
+        "Because the reasoning stays on eduGenAI's side, the extension needs no LLM API key. "
         "It only wraps OpenAlex, which is free.", NOTE))
 
     story.append(Paragraph("Before you start", H2))
     story.append(bullets(
         "An eduGenAI 2 account (edugenai2.npuls.nl, SRAM / SURFconext).",
-        "Agents with Actions enabled for your institution. Both are administrator "
-        "settings in LibreChat, and reachable domains can be restricted to a whitelist. "
-        "If the Agent Builder is missing or an action will not save, ask your "
-        "institution's contact or edugenai@npuls.nl to enable agent actions and to allow "
-        "www.phantocite.com.",
-        "A model that supports tool calling — the GPT models on the platform do.",
+        "The whitelist above. Without it the extension cannot be added, so get that email "
+        "in first.",
+        "A model that supports tool calling — the GPT models do. The open willma-* models "
+        "are the ones most likely to answer from memory and never call the tool.",
     ))
 
-    story.append(Paragraph("Step 1 — Create the agent", H2))
-    story.append(Paragraph("Open the Agent Builder in the sidebar, create an agent, give it "
-                           "a name and pick a model.", BODY))
+    story.append(Paragraph("Step 1 — Create the persona", H2))
+    story.append(Paragraph("Create a new Persona, give it a name, pick a GPT model, and set "
+                           "the conversation style to Precise.", BODY))
     story.append(Paragraph("Name", LABEL))
     story.append(code("Citation checker (OpenAlex)"))
 
     story.append(Paragraph("Step 2 — Paste the instructions", H2))
-    story.append(Paragraph("Into the agent's Instructions field, verbatim. This is the whole "
-                           "workflow: what to extract, when to call the tool, how to report.", BODY))
+    story.append(Paragraph("Into the persona's Instructions field, verbatim. This is the "
+                           "whole workflow: what to extract, when to call the tool, how to "
+                           "report.", BODY))
     story.append(code(INSTRUCTIONS))
 
     story.append(PageBreak())
-    story.append(Paragraph("Step 3 — Add the Action", H2))
-    story.append(Paragraph("Click Add Action. LibreChat builds the tool from an OpenAPI "
-                           "schema, and this app publishes one:", BODY))
-    story.append(code(SCHEMA_URL))
+    story.append(Paragraph("Step 3 — Add the extension", H2))
+    story.append(Paragraph("Go to Extensions &rarr; Add extension and fill it in: name "
+                           "<b>Phantocite</b>, description <b>Checks a paper's references "
+                           "against OpenAlex</b>, transport <b>Streamable HTTP</b>, "
+                           "authentication <b>No authentication</b>, and tick the trust "
+                           "checkbox. The URL of the MCP server is:", BODY))
+    story.append(code(MCP_URL))
+    story.append(Paragraph("Before registering it, you can confirm the server answers from "
+                           "any terminal — it should list verify_references:", BODY))
+    story.append(code(MCP_CURL))
     story.append(Paragraph(
-        "Paste that URL into the schema box (or open it and paste the JSON itself, if your "
-        "build has no import-from-URL field). Set Authentication to None — the endpoint "
-        "needs no key. Save the action, then save the agent.", BODY))
+        "The server is stateless and answers in plain JSON rather than opening a stream, "
+        "which is what makes it reliable on serverless hosting. If your build offers SSE as "
+        "the transport, choose Streamable HTTP anyway.", NOTE))
     story.append(Paragraph(
-        "The schema declares one operation, verify_references, and one server, "
-        f"<font face='Courier'>{HOST}</font>. LibreChat checks that an action's domain "
-        "matches that server URL, so leave it as published unless you are self-hosting — "
-        "in which case use your own deployment's /openapi/edugenai.json.", NOTE))
-    story.append(Paragraph(
-        "Optional — OpenAlex Premium: for higher OpenAlex rate limits, set the action's "
-        "authentication to an API key sent as the custom header X-OpenAlex-Key. It is used "
-        "per request and never stored. The tool works fine without one.", BODY))
+        "Optional — OpenAlex Premium: for higher OpenAlex rate limits, set the extension's "
+        "authentication to an API key sent as the header X-OpenAlex-Key. It is used per "
+        "request and never stored. The tool works fine without one.", BODY))
 
     story.append(Paragraph("Step 4 — Test it", H2))
-    story.append(Paragraph("Start a chat with the agent, attach a paper, and ask:", BODY))
+    story.append(Paragraph("Personas and extensions are separate objects, so the extension is "
+                           "switched on per chat: start a chat with the persona, enable "
+                           "Phantocite from the tools button in the composer, attach a paper, "
+                           "and ask:", BODY))
     story.append(code("Check the references in the attached paper."))
-    story.append(Paragraph("The agent should extract the references itself, call "
-                           "verify_references once, and answer with a table. LibreChat shows "
-                           "the tool call in the message, so you can confirm it ran.", BODY))
+    story.append(Paragraph("The persona should extract the references itself, call "
+                           "verify_references once, and answer with a table. The tool call is "
+                           "shown in the message, so you can confirm it ran.", BODY))
 
     story.append(Paragraph("Troubleshooting", H2))
     story.append(bullets(
-        "<b>No Agent Builder, or Add Action missing or refusing to save.</b> An "
-        "administrator setting — see Before you start. Nothing on this side works around it.",
-        "<b>Invalid schema or domain mismatch.</b> LibreChat checks the action's domain "
-        "against the servers URL in the schema; import the published URL unchanged.",
-        "<b>The agent never calls the tool.</b> Either the model has no tool support "
-        "(switch to a GPT model) or the instructions were not saved. Naming the tool in the "
-        "prompt forces it: \u201cUse the verify_references tool to check the references in the "
-        "attached paper.\u201d",
+        "<b>The extension will not save, or the domain is refused.</b> The domain has to be "
+        "whitelisted by Npuls first — see the top of this page. Nothing on this side works "
+        "around it.",
+        "<b>The extension saves but no tool appears in the chat.</b> Enable Phantocite from "
+        "the tools button in the composer for that conversation. If the list is empty, check "
+        "the transport is Streamable HTTP and confirm the server answers the tools/list "
+        "command in Step 3.",
+        "<b>The persona never calls the tool.</b> Either the model has no tool support "
+        "(switch to a GPT model, not an open willma-* one) or the instructions were not "
+        "saved. Naming the tool in the prompt forces it: \u201cUse the verify_references tool "
+        "to check the references in the attached paper.\u201d",
         "<b>Raw JSON in the chat.</b> The instructions were truncated or not saved; re-paste "
         "Step 2.",
-        "<b>count: 0.</b> Every response carries api_version, and one with no results carries "
-        "a hint describing what arrived (key names only, never content). No api_version at "
-        "all means the action points at an old deployment.",
+        "<b>count: 0.</b> Every response carries api_version. If it is missing or old, the "
+        "extension points at a stale deployment.",
         "<b>lookup_failed.</b> A failed lookup, not a fabrication — usually a reference with "
         "no usable title.",
     ))
@@ -186,10 +206,17 @@ def build():
                            "seconds with count: 1 and a Verified result:", BODY))
     story.append(code(CURL))
 
+    story.append(Paragraph("Using it somewhere else", H2))
+    story.append(Paragraph(
+        "Platforms that import an OpenAPI schema instead of connecting to an MCP server — "
+        "ChatGPT custom actions, other LibreChat builds — can use the same operation from "
+        f"<font face='Courier'>{SCHEMA_URL}</font>. It describes the same one tool, against "
+        "POST /api/verify_batch, and the Step 2 instructions apply unchanged.", BODY))
+
     story.append(Paragraph("Notes & limits", H2))
     story.append(bullets(
-        "No LLM key is stored or used by the action; OpenAlex is free and needs no key. "
-        "The agent's own model runs on eduGenAI's side, under its terms.",
+        "No LLM key is stored or used by the extension; OpenAlex is free and needs no key. "
+        "The persona's own model runs on eduGenAI's side, under its terms.",
         "Only bibliographic metadata reaches this endpoint. The paper's full text and the "
         "citing sentences stay inside eduGenAI.",
         "OpenAlex's canonical year can differ from a printed year (online-first vs issue "

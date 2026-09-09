@@ -17,12 +17,12 @@
   gtag('config', 'G-DXHMX17XQ1');
 </script>
 <title>Use Phantocite in eduGenAI 2 — Instructions</title>
-<meta name="description" content="How to add the Phantocite citation check to an eduGenAI 2 agent as an Action, so a paper's references are verified without leaving the chat.">
+<meta name="description" content="How to connect Phantocite to an eduGenAI 2 persona as an MCP extension, so a paper's references are verified without leaving the chat.">
 <link rel="canonical" href="{{SITE_URL}}/edugenai">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Phantocite">
 <meta property="og:title" content="Use Phantocite in eduGenAI 2">
-<meta property="og:description" content="How to add the Phantocite citation check to an eduGenAI 2 agent as an Action, so a paper's references are verified without leaving the chat.">
+<meta property="og:description" content="How to connect Phantocite to an eduGenAI 2 persona as an MCP extension, so a paper's references are verified without leaving the chat.">
 <meta property="og:url" content="{{SITE_URL}}/edugenai">
 <meta property="og:image" content="{{SITE_URL}}/static/og-image.png">
 <meta property="og:image:type" content="image/png">
@@ -31,7 +31,7 @@
 <meta property="og:image:alt" content="Phantocite — citation checker for student papers">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Use Phantocite in eduGenAI 2">
-<meta name="twitter:description" content="How to add the Phantocite citation check to an eduGenAI 2 agent as an Action, so a paper's references are verified without leaving the chat.">
+<meta name="twitter:description" content="How to connect Phantocite to an eduGenAI 2 persona as an MCP extension, so a paper's references are verified without leaving the chat.">
 <meta name="twitter:image" content="{{SITE_URL}}/static/og-image.png">
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
@@ -93,8 +93,9 @@
       
     </div>
   </div>
-  <p class="sub">Give an eduGenAI 2 agent an <strong>Action</strong> that verifies a paper's references against OpenAlex — inside your own chat, with no API key of your own.</p>
-  <div class="panel tone-info note" role="status"><strong>Rewritten for eduGenAI 2.</strong> eduGenAI 1 was withdrawn after vulnerabilities were found in an audit, and its Extension builder went with it. eduGenAI 2 (<code class="inline">edugenai2.npuls.nl</code>, sign in with SRAM) is built on <strong>LibreChat</strong>, where an assistant gains a tool from an <strong>OpenAPI schema</strong> instead of a hand-written function definition. That is a better fit for this tool: the schema below is published by this app, so there is nothing to keep in sync by hand.</div>
+  <p class="sub">Connect an eduGenAI 2 persona to this <strong>MCP server</strong> and it verifies a paper's references against OpenAlex — inside your own chat, with no API key of your own.</p>
+  <div class="panel tone-info note" role="status"><strong>Written for eduGenAI 2.</strong> eduGenAI 1 was withdrawn after vulnerabilities were found in an audit, and its Extension builder went with it. eduGenAI 2 (<code class="inline">edugenai2.npuls.nl</code>, sign in with SRAM) takes external tools one way only: <strong>Extensions → URL of MCP server</strong>. Its Personas have no tools section at all. So this app runs an <strong>MCP server</strong> at <code class="inline">/mcp</code>, and you register that URL.</div>
+  <div class="panel tone-warn note" role="status"><strong>Read this first: the domain must be whitelisted.</strong> The extension form says so outright — an MCP URL on a domain Npuls has not allowed cannot be registered at all. Mail <a href="mailto:edugenai@npuls.nl">edugenai@npuls.nl</a> and ask them to whitelist <code class="inline">www.phantocite.com</code> for use as an extension. Nothing on this side works around it, so start that email before the steps below.</div>
   <div class="topbar">
     <a class="btn primary" href="/static/edugenai-instructions.pdf" download>⬇ Download PDF version</a>
     <a class="btn secondary" href="/">Open the standalone tool</a>
@@ -103,36 +104,36 @@
 <main class="wrap">
 
   <h2>How it works</h2>
-  <p>An eduGenAI 2 <strong>agent</strong> is a saved assistant with its own instructions, model and tools. An <strong>Action</strong> is a tool built from an OpenAPI schema: you point the agent at a schema, it learns one function, and calls that endpoint when it needs to. The work splits cleanly in two:</p>
+  <p>Two separate objects on the platform. A <strong>Persona</strong> is a saved assistant with its own instructions and model. An <strong>Extension</strong> is a connection to an <strong>MCP server</strong> — a small service that advertises tools over a standard protocol. You create both, then switch the extension on in a chat. The work splits cleanly in two:</p>
   <table class="table">
     <thead><tr><th>Job</th><th>Runs where</th></tr></thead>
     <tbody>
-      <tr><td>Read the paper, pull out the reference list, find the citing sentences, judge whether each citation matches the source, write the report</td><td><strong>The eduGenAI agent</strong> — the reasoning stays on the platform</td></tr>
-      <tr><td>Look each reference up in OpenAlex; check title, <strong>authors</strong>, year, journal, DOI, volume, issue, pages; return the abstract</td><td><strong>This action's endpoint</strong> — deterministic, no LLM</td></tr>
+      <tr><td>Read the paper, pull out the reference list, find the citing sentences, judge whether each citation matches the source, write the report</td><td><strong>The eduGenAI persona</strong> — the reasoning stays on the platform</td></tr>
+      <tr><td>Look each reference up in OpenAlex; check title, <strong>authors</strong>, year, journal, DOI, volume, issue, pages; return the abstract</td><td><strong>This MCP server</strong> — deterministic, no LLM</td></tr>
     </tbody>
   </table>
-  <div class="panel tone-info note">Because the reasoning stays on eduGenAI's side, <strong>the action needs no LLM API key</strong>. It only wraps OpenAlex, which is free.</div>
+  <div class="panel tone-info note">Because the reasoning stays on eduGenAI's side, <strong>the extension needs no LLM API key</strong>. It only wraps OpenAlex, which is free.</div>
 
   <h2>Before you start</h2>
   <ul>
     <li>An <strong>eduGenAI 2 account</strong> — sign in at <code class="inline">edugenai2.npuls.nl</code> with SRAM / SURFconext.</li>
-    <li><strong>Agents with Actions enabled for your institution.</strong> In LibreChat both are switched on by the administrator, and the reachable domains can be restricted to a whitelist. If you cannot find the Agent Builder, or saving an action is refused, that is an administrator setting, not a mistake on your side — ask your institution's contact or <code class="inline">edugenai@npuls.nl</code> to enable agent actions and to allow <code class="inline">www.phantocite.com</code>.</li>
-    <li>A <strong>model that supports tool calling</strong> — the GPT models on the platform do. A model without tool support will answer from memory and never call the action.</li>
+    <li><strong>The whitelist above.</strong> Without it the extension cannot be added, so get that email in first.</li>
+    <li>A <strong>model that supports tool calling</strong> — the GPT models do. The open <code class="inline">willma-*</code> models are the ones most likely to answer from memory and never call the tool.</li>
   </ul>
   <p>Self-hosting this app? Every URL on this page is rewritten to the deployment you are reading it from (<code class="inline" id="host-token">https://YOUR-DEPLOYMENT-HOST</code>), so you can copy them exactly as they appear.</p>
 
   <h2>Step by step</h2>
   <ol class="steps">
     <li>
-      <h3>Create the agent</h3>
-      <p>Open the <strong>Agent Builder</strong> in the sidebar and create a new agent. Give it a name and pick a model.</p>
+      <h3>Create the persona</h3>
+      <p>Create a new <strong>Persona</strong>, give it a name, pick a GPT model, and set the conversation style to <em>Precise</em>.</p>
       <div class="codewrap"><pre id="c-name">Citation checker (OpenAlex)</pre><button class="copy" data-for="c-name">Copy</button></div>
       <p><span class="field-label">Description (optional)</span></p>
       <div class="codewrap"><pre id="c-short">Checks a paper's references against OpenAlex: whether each source exists, whether the printed details match, and whether the citation matches what the source is about.</pre><button class="copy" data-for="c-short">Copy</button></div>
     </li>
     <li>
       <h3>Paste the instructions</h3>
-      <p>Into the agent's <strong>Instructions</strong> field. This is the whole workflow — what to extract, when to call the tool, and how to report. Paste it verbatim.</p>
+      <p>Into the persona's <strong>Instructions</strong> field. This is the whole workflow — what to extract, when to call the tool, and how to report. Paste it verbatim.</p>
       <div class="codewrap"><pre id="c-detail">You check the reference list of a paper the user uploads. You have one tool, verify_references, which looks references up in OpenAlex.
 
 WHEN TO RUN. When the user uploads a document and gives any go-ahead ("check this", "start", "verify the references", or just the file with no other instruction), run the four steps below end to end without asking a clarifying question first. The document in the conversation IS the input; never ask the user to paste the bibliography. Only if no document has been provided at all, ask for one, then run.
@@ -150,18 +151,31 @@ REPORT ONLY THIS. No APA or formatting critique, no style fixes, no suggested ex
 NEVER invent a DOI, an author, a year or a verdict the tool did not return. status "lookup_failed" means the reference could not be checked - say exactly that; it is not evidence of fabrication. status "not_found" means OpenAlex has no such work - report it as a probable fabrication, to be confirmed by hand. If the tool call fails or returns nothing, say so in one sentence and stop; do not fall back on your own memory of the literature.</pre><button class="copy" data-for="c-detail">Copy</button></div>
     </li>
     <li>
-      <h3>Add the Action</h3>
-      <p>Still in the Agent Builder, click <strong>Add Action</strong>. LibreChat builds the tool from an OpenAPI schema, and this app publishes one:</p>
-      <div class="codewrap"><pre id="c-schema-url">https://www.phantocite.com/openapi/edugenai.json</pre><button class="copy" data-for="c-schema-url">Copy</button></div>
-      <p>Paste that URL into the schema box (or open it and paste the JSON itself, if your build has no import-from-URL field). Set <strong>Authentication</strong> to <em>None</em> — the endpoint needs no key. Save the action, then save the agent.</p>
-      <div class="panel tone-info note">The schema declares exactly one operation, <code class="inline">verify_references</code>, and one server, <code class="inline">https://www.phantocite.com</code>. LibreChat checks that an action's domain matches that server URL, so leave it as published unless you are self-hosting — in which case use your own deployment's <code class="inline">/openapi/edugenai.json</code>, which carries your address.</div>
-      <p><strong>Optional — OpenAlex Premium:</strong> for higher OpenAlex rate limits, set the action's authentication to an API key sent as the custom header <code class="inline">X-OpenAlex-Key</code>. It is used per request and never stored. Leave it off unless you have a Premium key; the tool works fine without one.</p>
+      <h3>Add the extension</h3>
+      <p>Go to <strong>Extensions → Add extension</strong> and fill it in:</p>
+      <table class="table">
+        <thead><tr><th>Field</th><th>Value</th></tr></thead>
+        <tbody>
+          <tr><td>Name</td><td>Phantocite</td></tr>
+          <tr><td>Description</td><td>Checks a paper's references against OpenAlex</td></tr>
+          <tr><td>URL of MCP server</td><td><code class="inline" id="c-mcp-url">https://www.phantocite.com/mcp</code></td></tr>
+          <tr><td>Transport type</td><td>Streamable HTTP</td></tr>
+          <tr><td>Authentication type</td><td>No authentication</td></tr>
+          <tr><td>Trust checkbox</td><td>tick it</td></tr>
+        </tbody>
+      </table>
+      <p>Before registering it, you can confirm the server answers from any terminal — it should list <code class="inline">verify_references</code>:</p>
+      <div class="codewrap"><pre id="c-mcp-curl">curl -s -X POST https://www.phantocite.com/mcp \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'</pre><button class="copy" data-for="c-mcp-curl">Copy</button></div>
+      <div class="panel tone-info note">The server is stateless and answers in plain JSON rather than opening a stream, which is what makes it reliable on serverless hosting. If a build of the platform offers <em>SSE</em> as the transport, choose <strong>Streamable HTTP</strong> anyway.</div>
+      <p><strong>Optional — OpenAlex Premium:</strong> for higher OpenAlex rate limits, set the extension's authentication to an API key sent as the header <code class="inline">X-OpenAlex-Key</code>. It is used per request and never stored. Leave it off unless you have a Premium key; the tool works fine without one.</p>
     </li>
     <li>
       <h3>Test it</h3>
-      <p>Start a chat with the agent, attach a paper, and ask:</p>
+      <p>Personas and extensions are separate objects, so the extension is <strong>switched on per chat</strong>: start a chat with the persona, enable <em>Phantocite</em> from the tools button in the composer, attach a paper, and ask:</p>
       <div class="codewrap"><pre id="c-prompt">Check the references in the attached paper.</pre><button class="copy" data-for="c-prompt">Copy</button></div>
-      <p>The agent should extract the references itself, call <code class="inline">verify_references</code> once, and answer with the table. LibreChat shows the tool call in the message, so you can confirm it ran.</p>
+      <p>The persona should extract the references itself, call <code class="inline">verify_references</code> once, and answer with the table. The tool call is shown in the message, so you can confirm it ran.</p>
     </li>
   </ol>
 
@@ -229,11 +243,11 @@ NEVER invent a DOI, an author, a year or a verdict the tool did not return. stat
 
   <h2>Troubleshooting</h2>
   <ul>
-    <li><strong>No Agent Builder, or "Add Action" is missing or refuses to save.</strong> Agents and actions are enabled per deployment by the administrator, and the domains an action may reach can be restricted to a whitelist. Ask your institution's eduGenAI contact, or <code class="inline">edugenai@npuls.nl</code>, to enable agent actions and to allow <code class="inline">www.phantocite.com</code>. Nothing on this side can work around it.</li>
-    <li><strong>The action is rejected as an invalid schema or a domain mismatch.</strong> LibreChat checks that the action's domain matches the <code class="inline">servers</code> URL in the schema. Import the published schema URL unchanged; if you edit the JSON by hand, keep <code class="inline">servers[0].url</code> and the action domain identical.</li>
-    <li><strong>The agent answers about the paper but never calls the tool.</strong> Either the model does not support tool calling — switch to a GPT model — or the instructions were not saved. Naming the tool in the prompt forces the issue: <em>“Use the verify_references tool to check the references in the attached paper.”</em></li>
-    <li><strong>You see raw JSON in the chat.</strong> The instructions were truncated or not saved with the agent; re-paste Step 2. As a per-chat override, add: <em>“Present the results as a severity-sorted table with the mismatches spelled out; do not show raw JSON.”</em></li>
-    <li><strong>The tool returns <code class="inline">count: 0</code>.</strong> Every response carries an <code class="inline">api_version</code>, and a response with no results carries a <code class="inline">hint</code> describing what actually arrived (key names only, never content). Ask the agent to show the raw output and read those two fields. No <code class="inline">api_version</code> at all means the action is pointed at an old deployment rather than the current one.</li>
+    <li><strong>The extension will not save, or the domain is refused.</strong> The domain has to be whitelisted by Npuls first — see the note at the top. Nothing on this side can work around it.</li>
+    <li><strong>The extension saves but no tool appears in the chat.</strong> Personas and extensions are separate: enable <em>Phantocite</em> from the tools button in the composer for that conversation. If the list is empty, check the transport is <em>Streamable HTTP</em> and confirm the server answers with the <code class="inline">tools/list</code> command in Step 3.</li>
+    <li><strong>The persona answers about the paper but never calls the tool.</strong> Either the model does not support tool calling — switch to a GPT model, not one of the open <code class="inline">willma-*</code> ones — or the instructions were not saved. Naming the tool in the prompt forces the issue: <em>“Use the verify_references tool to check the references in the attached paper.”</em></li>
+    <li><strong>You see raw JSON in the chat.</strong> The instructions were truncated or not saved with the persona; re-paste Step 2. As a per-chat override, add: <em>“Present the results as a severity-sorted table with the mismatches spelled out; do not show raw JSON.”</em></li>
+    <li><strong>The tool returns <code class="inline">count: 0</code>.</strong> Every response carries an <code class="inline">api_version</code>. Ask the persona to show the raw output and read it: if it is missing or old, the extension is pointed at a stale deployment rather than the current one.</li>
     <li><strong>A reference comes back <code class="inline">lookup_failed</code>.</strong> That is a failed lookup, not a fabrication — usually a reference with no usable title. The instructions already tell the agent to report it that way.</li>
   </ul>
   <p>To check the endpoint independently of eduGenAI, run this from any terminal — a healthy deployment answers in a couple of seconds with <code class="inline">count: 1</code> and a <code class="inline">Verified</code> result:</p>
@@ -242,7 +256,7 @@ NEVER invent a DOI, an author, a year or a verdict the tool did not return. stat
   -d '{"references":[{"title":"Attention is all you need","year":2017}]}'</pre><button class="copy" data-for="c-curl">Copy</button></div>
 
   <h3>If you suspect the platform is not sending the arguments</h3>
-  <p>This was the failure that ended the eduGenAI 1 integration: the assistant composed the call, but the arguments never left the platform. LibreChat sends a normal JSON body built from the schema, so it should not recur — and if you ever need to prove where the fault lies, the <code class="inline">/api/echo</code> endpoint mirrors back exactly what arrives: method, headers, query string and raw body, with no parsing in between. If your text is not in its response, it never reached the server.</p>
+  <p>This was the failure that ended the eduGenAI 1 integration: the assistant composed the call, but the arguments never left the platform. MCP carries real JSON, and the tool accepts a stringified array too, so it should not recur — and if you ever need to prove where the fault lies, the <code class="inline">/api/echo</code> endpoint mirrors back exactly what arrives: method, headers, query string and raw body, with no parsing in between. If your text is not in its response, it never reached the server.</p>
   <div class="codewrap"><pre id="c-echo-curl">curl -s -X POST https://www.phantocite.com/api/echo \
   -H "Content-Type: application/json" \
   -d '{"message":"PHANTOCITE-TRANSPORT-TEST-42"}'</pre><button class="copy" data-for="c-echo-curl">Copy</button></div>
@@ -261,9 +275,12 @@ NEVER invent a DOI, an author, a year or a verdict the tool did not return. stat
   <div class="panel tone-info note"><strong>So, does “all data go through me”?</strong> No — only the bibliographic metadata of the references, and only in transit. The endpoint reads just those fields; the citing sentences aren't part of what the action sends, and anything else that were included would be discarded unread (never logged or stored). <strong>Just the function call?</strong> Yes; that is the only thing that reaches your server. <strong>Is it logged?</strong> Not by this app — it is stateless (no database, no file writes) and never logs request bodies or keys. Whatever hosting stack or reverse proxy you deploy behind may keep its own access log (request line: method + path + status, not bodies) — that part is under your control, and you can turn it down.
   <br><br><strong>One caveat about the OpenAlex Premium key:</strong> it is used per-request, never stored, and scrubbed from any error message this app returns. But when your endpoint calls OpenAlex, the key travels as a query parameter on the outbound URL — so if you run behind an <em>egress</em> proxy that logs full outbound URLs, it could appear there. If that matters, don't set a Premium key (the tool works fine without one) or use a proxy that redacts query strings.</div>
 
+  <h2>Using it somewhere else</h2>
+  <p>Platforms that import an <strong>OpenAPI schema</strong> instead of connecting to an MCP server — ChatGPT custom actions, other LibreChat builds — can use the same operation from <code class="inline" id="c-schema-url">https://www.phantocite.com/openapi/edugenai.json</code>. It describes the same one tool, against <code class="inline">POST /api/verify_batch</code>, and the Step 2 instructions apply unchanged.</p>
+
   <h2>Notes &amp; limits</h2>
   <ul>
-    <li>No LLM key is stored or used by the action; OpenAlex is free and needs no key. The agent's own model runs on eduGenAI's side, under its terms.</li>
+    <li>No LLM key is stored or used by the extension; OpenAlex is free and needs no key. The persona's own model runs on eduGenAI's side, under its terms.</li>
     <li>The metadata check compares against OpenAlex's canonical record. Occasionally OpenAlex's year differs from the printed year (e.g. online-first vs issue year) — treat a lone year mismatch as a prompt to double-check, not a verdict.</li>
     <li>The misquote judgement is based on the <em>abstract</em> only, so a claim supported by the full text but not the abstract may read as uncertain. These are leads for a human reviewer.</li>
     <li>Batch requests are capped at 200 references.</li>
@@ -301,7 +318,7 @@ NEVER invent a DOI, an author, a year or a verdict the tool did not return. stat
     var origin = window.location.origin;
     if (!/^https?:\/\//.test(origin)) return;
     document.querySelectorAll("#host-token").forEach(function (el) { el.textContent = origin; });
-    ["c-schema-url", "c-curl", "c-echo-curl"].forEach(function (id) {
+    ["c-schema-url", "c-mcp-url", "c-mcp-curl", "c-curl", "c-echo-curl"].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.textContent = el.textContent
         .replace("https://YOUR-DEPLOYMENT-HOST", origin)
