@@ -1384,3 +1384,41 @@ def test_cookie_bar_and_consent_mode_on_both_pages():
         assert 'id="cookie-accept"' in html and "Accept cookies" in html
         assert html.index("gtag('consent', 'default'") < html.index("gtag('config'")
     assert "session cookie" in client.get("/login").text
+
+
+# PDF export: the browser posts the rows it already built for the other
+# downloads and gets a typeset report back. Values come from a student's
+# document, so hostile text must not reach the PDF engine unescaped.
+def test_report_pdf_export():
+    from conftest import login
+    from fastapi.testclient import TestClient
+    from app import main, report
+
+    rows = [{"#": 1, "Status": "Verified", "Priority": "Review",
+             "Reference (as printed)": "Shannon & Weaver (1948) <b>x</b> & y",
+             "Year ref / OA": " / ", "OpenAlex URL": "https://openalex.org/W1"}]
+    anon = TestClient(main.app)
+    assert anon.post("/api/report.pdf", json={"rows": rows}).status_code == 401
+
+    client = login(TestClient(main.app))
+    r = client.post("/api/report.pdf", json={"rows": rows, "summary": ["1 reference"]})
+    assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
+    assert r.content.startswith(b"%PDF") and len(r.content) > 800
+    assert ".pdf" in r.headers["content-disposition"]
+
+    assert client.post("/api/report.pdf", json={"rows": []}).status_code == 400
+    too_many = [{"#": i} for i in range(report.MAX_ROWS + 1)]
+    assert client.post("/api/report.pdf", json={"rows": too_many}).status_code == 400
+
+
+def test_report_values_are_escaped_and_capped():
+    from app import report
+    assert report._text("a & b <script>") == "a &amp; b &lt;script&gt;"
+    assert report._text("line\nbreak") == "line<br/>break"
+    assert report._text("\x00\x07clean") == "clean"
+    assert report._text(None) == "" and report._text(7) == "7"
+    long = report._text("x" * (report.MAX_VALUE_CHARS + 500))
+    assert len(long) < report.MAX_VALUE_CHARS + 10 and long.endswith("…")
+    # A row of hostile values still produces a valid document.
+    pdf = report.build_pdf([{"#": "1", "Notes": "</para><b>x", "Title": "&amp;"}])
+    assert pdf.startswith(b"%PDF")

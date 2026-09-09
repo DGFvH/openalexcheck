@@ -163,6 +163,7 @@
         <li><strong>The configured LLM provider</strong> (<span class="provider-name-copy"></span>) receives the document text (needed to locate the reference list and citing sentences) and, for the misquote check, the citation snippets plus OpenAlex abstracts — nothing more. Requests run under the site owner's API key.</li>
         <li>All three providers state that data sent via an <em>API key</em> is <strong>not used to train their models</strong> by default.</li>
         <li><strong>Cookies.</strong> Signing in sets one session cookie that only keeps you signed in (it expires when you close the browser). After you accept cookies, <strong>Google Analytics</strong> (gtag.js) sets cookies to measure how the site is used — page views, runs, model choice — never your document, references, keys or results.</li>
+        <li>The <strong>CSV, Markdown and HTML downloads</strong> are written in your browser and never leave it. The <strong>PDF download</strong> posts the finished results table back to this server to be typeset, and the file is streamed straight back to you.</li>
         <li>This tool stores nothing: no database, no file writes, no logs of your document or keys.</li>
       </ul>
     </details>
@@ -194,6 +195,7 @@
         <button class="btn ghost small" data-fmt="csv">CSV</button>
         <button class="btn ghost small" data-fmt="md">Markdown</button>
         <button class="btn ghost small" data-fmt="html">HTML</button>
+        <button class="btn ghost small" data-fmt="pdf">PDF</button>
       </div>
     </div>
     <div id="banners"></div>
@@ -276,7 +278,10 @@ $("sample").addEventListener("click", showSample);
 $("tab-results").addEventListener("click", () => switchTab("results"));
 $("tab-fuzzy").addEventListener("click", () => switchTab("fuzzy"));
 $("downloads").querySelectorAll("button").forEach(b =>
-  b.addEventListener("click", () => downloadResults(b.dataset.fmt)));
+  b.addEventListener("click", async () => {
+    b.disabled = true;
+    try { await downloadResults(b.dataset.fmt); } finally { b.disabled = false; }
+  }));
 populateModels();
 
 function switchTab(name) {
@@ -979,9 +984,10 @@ function attachFuzzyHandlers() {
   });
 }
 
-// --- downloads (client-side; no server round-trip, no LLM) ----------------
-// One row per reference with the verification outcome. Built entirely in the
-// browser from data already on the page — the efficient choice for a table.
+// --- downloads ------------------------------------------------------------
+// One row per reference with the verification outcome, built in the browser
+// from data already on the page. CSV/Markdown/HTML are written here and never
+// leave the machine; PDF posts these rows back to be typeset (nothing stored).
 function tableRows() {
   const orphanRows = (DATA.orphans || []).map(o => ({
     "#": "", "Status": "Cited, missing from reference list", "Priority": "Review",
@@ -1019,11 +1025,12 @@ function tableRows() {
   }));
 }
 
-function downloadResults(fmt) {
+async function downloadResults(fmt) {
   const rows = tableRows();
   if (!rows.length) return;
   const cols = Object.keys(rows[0]);
   const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+  if (fmt === "pdf") return downloadPdf(rows, stamp);
   if (fmt === "csv") {
     // Spreadsheets evaluate a cell starting with = + - @ (or a tab/CR) even
     // inside quotes; the cells carry text copied from the student's document,
@@ -1056,8 +1063,31 @@ th{background:#f6f4ef}tr.hi td{background:#f6dcd8}</style>
   }
 }
 
+// The PDF is typeset server-side (no PDF engine in the page, and the strict
+// Content-Security-Policy allows no third-party script to provide one).
+async function downloadPdf(rows, stamp) {
+  const summary = [...$("summary").querySelectorAll(".chip")].map(c => c.textContent.trim());
+  try {
+    const resp = await fetch("/api/report.pdf", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows, summary }),
+    });
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.detail || `Request failed (${resp.status})`);
+    }
+    saveFile(await resp.blob(), `citation-check-${stamp}.pdf`);
+  } catch (err) {
+    showError(`Could not build the PDF: ${err.message}`);
+  }
+}
+
 function saveBlob(text, filename, mime) {
-  const blob = new Blob([text], { type: mime + ";charset=utf-8" });
+  saveFile(new Blob([text], { type: mime + ";charset=utf-8" }), filename);
+}
+
+function saveFile(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url; a.download = filename;

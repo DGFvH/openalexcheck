@@ -49,6 +49,11 @@ heartbeats, so a long analysis can't be dropped by an idle-connection timeout
 OpenAlex needs no API key (the site's `OPENALEX_MAILTO` puts it in the polite
 pool). The LLM runs on the server's key.
 
+**Downloads.** Results export as CSV, Markdown, HTML or PDF. The first three
+are written in the browser; the PDF is typeset by `POST /api/report.pdf`
+(reportlab, `app/report.py`) from the same rows and streamed back — nothing is
+written to disk.
+
 **Capacity.** The output-token cap per LLM call is fixed server-side
 (`LLM_MAX_TOKENS`, default 12000) and sized to the analysis time budget
 (`ANALYSIS_BUDGET_S`, default 270 s): that comfortably covers a typical student

@@ -215,3 +215,18 @@ def test_cookie_bar_acceptance_is_remembered(browser, base_url):
     page.reload(wait_until="domcontentloaded")
     assert page.is_hidden("#cookie-bar")
     page.close()
+
+
+def test_pdf_export_downloads_a_real_pdf(browser, base_url, monkeypatch):
+    _install(monkeypatch, [_ref(1), _ref(2)],
+             orphans=[{"label": "Doe (2021)", "year": 2021, "context": "As Doe (2021) says"}])
+    page = browser.new_page()
+    _run(page, base_url)
+    with page.expect_download() as dl:
+        page.click("#downloads button[data-fmt=pdf]")
+    path = dl.value.path()
+    assert dl.value.suggested_filename.endswith(".pdf")
+    with open(path, "rb") as fh:
+        assert fh.read(5).startswith(b"%PDF")
+    assert page.is_hidden("#error") or "PDF" not in page.inner_text("#error")
+    page.close()

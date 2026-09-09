@@ -1,5 +1,4 @@
-# Build-time only (not needed to run the app).
+# reportlab is a runtime dependency (PDF export) — see requirements.txt.
 # Regenerate the EduGenAI instructions PDF: python scripts/build_edugenai_pdf.py
-reportlab>=4.0
 
 pytest>=8

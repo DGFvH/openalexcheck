@@ -34,11 +34,12 @@ from typing import Any, Callable, Optional
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, RedirectResponse,
+                               Response, StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import auth
+from . import auth, report
 from .analysis import compare_contexts, extract_references
 from .extract import ExtractionError, extract_text
 from .keysafety import redact
@@ -192,7 +193,8 @@ def logout():
 # platform's egress IPs, so the batch limit is deliberately generous.
 # ---------------------------------------------------------------------------
 
-RATE_LIMITS = {"/api/analyze": (6, 60), "/api/verify_batch": (30, 60), "/login": (10, 60), "*": (120, 60)}
+RATE_LIMITS = {"/api/analyze": (6, 60), "/api/verify_batch": (30, 60), "/login": (10, 60),
+               "/api/report.pdf": (20, 60), "*": (120, 60)}
 
 
 class RateLimiter:
@@ -483,6 +485,27 @@ def compare(req: CompareRequest):
     return {"results": results}
 
 
+class ReportRequest(BaseModel):
+    """The report records the browser already builds for the other downloads."""
+    rows: list[dict[str, Any]] = Field(default_factory=list)
+    summary: list[str] = Field(default_factory=list)
+
+
+@app.post("/api/report.pdf")
+def report_pdf(req: ReportRequest):
+    """Render a finished check as a PDF. Stateless: nothing is written to disk,
+    and the rows come from (and go straight back to) the caller's own browser."""
+    if not req.rows:
+        raise HTTPException(400, "Nothing to export.")
+    if len(req.rows) > report.MAX_ROWS:
+        raise HTTPException(400, f"Too many rows to export (limit {report.MAX_ROWS}).")
+    pdf = report.build_pdf(req.rows, req.summary)
+    return Response(pdf, media_type="application/pdf", headers={
+        "Content-Disposition": f'attachment; filename="{report.filename()}"',
+        "Cache-Control": "no-store",
+    })
+
+
 # ---------------------------------------------------------------------------
 # EduGenAI (and any tool-calling platform) extension API.
 #
@@ -761,7 +784,7 @@ def _run_batch(items: list, key: Optional[str]) -> list[dict]:
 # indistinguishable from a parsing failure on the current one.
 # Deployment marker, returned by the verify endpoints (and /api/echo). BUMP on
 # every deploy so "is production current?" stays answerable from a response.
-API_VERSION = "2026-09-03.15"
+API_VERSION = "2026-09-03.16"
 
 
 def _from_query(request: Request) -> tuple[list, Optional[str]]:
