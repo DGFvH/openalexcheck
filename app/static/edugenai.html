@@ -97,7 +97,7 @@
     </div>
   </div>
   <p class="sub">Connect an eduGenAI 2 persona to this <strong>MCP server</strong> and it verifies a paper's references against OpenAlex — inside your own chat, with no API key of your own.</p>
-  <div class="panel tone-warn note" id="status" role="status"><strong>eduGenAI is unavailable for now.</strong> The integration is built and tested, but it cannot be registered until <strong>Npuls whitelists this domain</strong> — the extension form rejects any MCP server URL on a domain they have not allowed. Mail <a href="mailto:edugenai@npuls.nl">edugenai@npuls.nl</a> and ask them to allow <code class="inline">www.phantocite.com</code> as an extension domain. Until then, the checker runs here: <a href="/">open the standalone tool</a>.</div>
+  <div class="panel tone-warn note" id="status" role="status"><strong>eduGenAI is unavailable for now.</strong> The integration is built and tested, but it cannot be registered until <strong>Npuls whitelists this domain</strong> — the extension form rejects any MCP server URL on a domain they have not allowed. Until then, the checker runs here: <a href="/">open the standalone tool</a>.</div>
 </header>
 <main class="wrap">
 <details class="setup">
@@ -122,7 +122,7 @@
   <h2>Before you start</h2>
   <ul>
     <li>An <strong>eduGenAI 2 account</strong> — sign in at <code class="inline">edugenai2.npuls.nl</code> with SRAM / SURFconext.</li>
-    <li><strong>The whitelist above.</strong> Without it the extension cannot be added, so get that email in first.</li>
+    <li><strong>The whitelist above.</strong> Without it the extension cannot be added at all.</li>
     <li>A <strong>model that supports tool calling</strong> — the GPT models do. The open <code class="inline">willma-*</code> models are the ones most likely to answer from memory and never call the tool.</li>
   </ul>
   <p>Self-hosting this app? Every URL on this page is rewritten to the deployment you are reading it from (<code class="inline" id="host-token">https://YOUR-DEPLOYMENT-HOST</code>), so you can copy them exactly as they appear.</p>

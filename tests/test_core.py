@@ -1447,7 +1447,9 @@ def test_edugenai_page_documents_the_new_flow():
     # The page leads with the blocker; the steps are folded away behind it.
     assert "eduGenAI is unavailable for now" in html
     assert '<details class="setup">' in html and '<details class="setup" open' not in html
-    assert "whitelist" in html and "edugenai@npuls.nl" in html   # the blocker, up front
+    assert "whitelist" in html                    # the blocker, up front
+    # Requesting it is the operator's job, not a reader's: no mail-them instruction.
+    assert "edugenai@npuls.nl" not in html
     assert "Temporarily offline" not in html and "Add Action" not in html
     assert "verify_references" in html
     assert "openapi" not in html.lower()          # no schema is published

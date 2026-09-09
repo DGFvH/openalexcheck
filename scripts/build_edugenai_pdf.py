@@ -108,9 +108,7 @@ def build():
     story.append(Paragraph(
         "<b>Read this first: the domain must be whitelisted.</b> The extension form says so "
         "outright — an MCP URL on a domain Npuls has not allowed cannot be registered at all. "
-        "Mail edugenai@npuls.nl and ask them to whitelist www.phantocite.com for use as an "
-        "extension. Nothing on this side works around it, so start that email before the "
-        "steps below.", NOTE))
+        "Nothing on this side works around it.", NOTE))
 
     story.append(Paragraph("How it works", H2))
     story.append(Paragraph(
@@ -132,8 +130,7 @@ def build():
     story.append(Paragraph("Before you start", H2))
     story.append(bullets(
         "An eduGenAI 2 account (edugenai2.npuls.nl, SRAM / SURFconext).",
-        "The whitelist above. Without it the extension cannot be added, so get that email "
-        "in first.",
+        "The whitelist above. Without it the extension cannot be added at all.",
         "A model that supports tool calling — the GPT models do. The open willma-* models "
         "are the ones most likely to answer from memory and never call the tool.",
     ))
