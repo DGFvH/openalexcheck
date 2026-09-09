@@ -1364,3 +1364,39 @@ def test_report_values_are_escaped_and_capped():
     # A row of hostile values still produces a valid document.
     pdf = report.build_pdf([{"#": "1", "Notes": "</para><b>x", "Title": "&amp;"}])
     assert pdf.startswith(b"%PDF")
+
+
+# The report is split into "to check" and "verified", and paired values are
+# collapsed to one side when both agree — that is what keeps it short.
+def test_report_groups_and_collapses():
+    from app import report
+
+    review = {"#": 2, "Status": "Verified", "Priority": "Review"}
+    fuzzy = {"#": 3, "Status": "Fuzzy match", "Priority": ""}
+    orphan = {"#": "", "Status": "Cited, missing from reference list", "Priority": "Review"}
+    clean = {"#": 1, "Status": "Verified", "Priority": ""}
+    assert [report.needs_checking(r) for r in (review, fuzzy, orphan, clean)] == [True, True, True, False]
+
+    assert report._collapse("Year ref / OA", "1948 / 1948") == ("Year", "1948")
+    assert report._collapse("Year ref / OA", "/") == ("Year", "")
+    name, value = report._collapse("Year ref / OA", "2015 / 2016")
+    assert name == "Year" and "2015" in value and "2016" in value
+    name, value = report._collapse("Year ref / OA", "2021 /")
+    assert name == "Year" and "not in OpenAlex" in value
+    name, value = report._collapse("DOI ref / OA", "/ 10.1109/CVPR.2016.90")
+    assert name == "DOI" and value.startswith("10.1109/CVPR.2016.90")     # split on " / ", not "/"
+    assert report._collapse("Notes", "a / b") == ("Notes", "a / b")       # only paired columns
+
+    # A clean reference costs one line; one needing a look keeps its detail.
+    rows = [clean | {"Reference (as printed)": "Clean", "Year ref / OA": "1948 / 1948"},
+            review | {"Reference (as printed)": "Suspect", "Year ref / OA": "2015 / 2016"}]
+    assert report.build_pdf(rows).startswith(b"%PDF")
+
+
+def test_report_font_draws_european_names():
+    """Built-in PDF fonts are Latin-1: 'Kaiser, Ł.' would print as a black box."""
+    from app import report
+    assert report._portable("Kaiser, Ł. · Čapek — “x”") == "Kaiser, Ł. · Čapek — “x”"
+    assert "α" not in report._portable("α")          # no glyph → never a black box
+    assert report._portable("Erdős") in ("Erdős", "Erdos")
+    assert report.FONT in report.build_pdf([{"#": 1}]).decode("latin-1")
