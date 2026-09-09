@@ -4,11 +4,11 @@
 
 A small web tool for checking the references in a student paper.
 
-> **Temporary mode (current `main`).** The site runs on the owner's LLM key
-> (`LLM_API_KEY` / `LLM_PROVIDER` in the server environment) and is behind a
-> simple password (`SITE_PASSWORD`); the form has no key field. The original
-> bring-your-own-key version is preserved on the `byok-public` branch. The
-> keyless EduGenAI endpoints (`/api/verify*`, `/api/echo`) are not gated.
+> **Server-key mode (current `main`).** The site runs on the owner's LLM key
+> (`LLM_API_KEY` / `LLM_PROVIDER` in the server environment); the form has no
+> key field and there is no sign-in, so every visitor's analysis is billed to
+> that key and the per-IP rate limits are the only brake. The original
+> bring-your-own-key version is preserved on the `byok-public` branch.
 
 You upload a **PDF or DOCX**; the analysis runs on the configured LLM (Claude,
 ChatGPT, or Gemini). Two checks can be ticked:
@@ -78,8 +78,7 @@ Production runs on Vercel (zero-config FastAPI, entry point `app/main.py`),
 auto-deployed from `main`. Things the repo cannot set for you:
 
 - **Environment variables** (Vercel → Settings → Environment Variables):
-  `SITE_PASSWORD` (the temporary gate; without it the key-spending endpoints
-  refuse to run), `LLM_API_KEY` (the owner's provider key), `LLM_PROVIDER`
+  `LLM_API_KEY` (the owner's provider key), `LLM_PROVIDER`
   (`anthropic` default, or `openai` / `gemini`), and
   `OPENALEX_MAILTO` — required in production (polite pool; the app logs a
   warning without it). Optional tuning: `ANALYSIS_BUDGET_S` (wall-clock budget

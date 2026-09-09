@@ -34,12 +34,12 @@ from typing import Any, Callable, Optional
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, RedirectResponse,
-                               Response, StreamingResponse)
+from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, Response,
+                               StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import auth, report
+from . import report
 from .analysis import compare_contexts, extract_references
 from .extract import ExtractionError, extract_text
 from .keysafety import redact
@@ -107,10 +107,6 @@ def _server_llm(model: str) -> LLMClient:
     provider, key = _llm_config()
     if not key:
         raise HTTPException(503, "LLM_API_KEY is not configured on the server.")
-    if not auth.gate_enabled():
-        # Fail closed: never spend the owner's key on an unprotected site.
-        raise HTTPException(503, "SITE_PASSWORD is not configured — refusing to use the server's "
-                                 "API key on an open site.")
     try:
         return LLMClient(provider, key, model)
     except LLMError as exc:
@@ -123,7 +119,6 @@ def _page(name: str) -> HTMLResponse:
     html = ((STATIC_DIR / name).read_text(encoding="utf-8")
             .replace("<script", f'<script nonce="{nonce}"')
             .replace("{{LLM_PROVIDER}}", provider)
-            .replace("{{GATED}}", "1" if auth.gate_enabled() else "")
             .replace("{{CAP_PAGES}}", str(CAPACITY_NOTE_PAGES))
             .replace("{{CAP_REFS}}", str(CAPACITY_NOTE_REFS)))
     csp = ("default-src 'self'; "
@@ -147,45 +142,6 @@ def index():
 
 
 # ---------------------------------------------------------------------------
-# TEMPORARY password gate (see app/auth.py). Registered after the rate limiter,
-# so it runs first: unauthenticated requests never reach the API.
-# ---------------------------------------------------------------------------
-
-@app.middleware("http")
-async def _password_gate(request: Request, call_next):
-    if auth.gate_enabled() and not auth.is_open(request.url.path) and not auth.is_authenticated(request):
-        return auth.deny(request)
-    return await call_next(request)
-
-
-@app.get("/login")
-def login_form(next: str = "/"):
-    if not auth.gate_enabled():
-        return RedirectResponse("/", status_code=302)
-    return auth.login_page(auth.safe_next(next))
-
-
-@app.post("/login")
-async def login_submit(request: Request, password: str = Form(""), next: str = Form("/")):
-    if not auth.gate_enabled():
-        return RedirectResponse("/", status_code=303)
-    target = auth.safe_next(next)
-    if auth.check_password(password):
-        resp = RedirectResponse(target, status_code=303)
-        auth.set_cookie(resp, request)
-        return resp
-    log.warning("failed login attempt")
-    return auth.login_page(target, error=True, status=401)
-
-
-@app.post("/logout")
-def logout():
-    resp = RedirectResponse("/login", status_code=303)
-    auth.clear_cookie(resp)
-    return resp
-
-
-# ---------------------------------------------------------------------------
 # Per-client rate limiting on the keyless API. Best-effort: it is in-process
 # (per instance on a serverless platform), so the durable control is the
 # platform's firewall; this stops the casual loop from burning the deployment's
@@ -193,7 +149,7 @@ def logout():
 # platform's egress IPs, so the batch limit is deliberately generous.
 # ---------------------------------------------------------------------------
 
-RATE_LIMITS = {"/api/analyze": (6, 60), "/api/verify_batch": (30, 60), "/login": (10, 60),
+RATE_LIMITS = {"/api/analyze": (6, 60), "/api/verify_batch": (30, 60),
                "/api/report.pdf": (20, 60), "*": (120, 60)}
 
 
@@ -223,7 +179,7 @@ _LIMITER = RateLimiter(RATE_LIMITS)
 @app.middleware("http")
 async def _rate_limit(request: Request, call_next):
     path = request.url.path
-    limited = (path.startswith("/api/") and path != "/api/health") or (path == "/login" and request.method == "POST")
+    limited = path.startswith("/api/") and path != "/api/health"
     if _LIMITER.enabled and limited:
         ip = ((request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
               or request.headers.get("x-real-ip")
@@ -784,7 +740,7 @@ def _run_batch(items: list, key: Optional[str]) -> list[dict]:
 # indistinguishable from a parsing failure on the current one.
 # Deployment marker, returned by the verify endpoints (and /api/echo). BUMP on
 # every deploy so "is production current?" stays answerable from a response.
-API_VERSION = "2026-09-03.16"
+API_VERSION = "2026-09-03.17"
 
 
 def _from_query(request: Request) -> tuple[list, Optional[str]]:

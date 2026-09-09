@@ -36,10 +36,8 @@
   .credit-links { display: inline-flex; gap: .5rem; color: var(--muted); }
   .credit-links a { display: inline-flex; color: var(--muted); }
   .credit-links a:hover { color: var(--accent); }
-  .inline-form { display: inline; }
   .sub { color: var(--muted); margin: 0; }
   .foot { color: var(--muted); font-size: var(--fs-sm); margin: 1rem 0 0; }
-  body:not([data-gated="1"]) .gated-only { display: none; }
   #form-card { margin-top: 1.5rem; padding: 1.25rem 1.5rem; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 0 1.5rem; }
   .checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: .75rem; margin-top: 1rem; }
@@ -112,7 +110,7 @@
   .orphan-item .meta-inline { color: var(--muted); }
 </style>
 </head>
-<body data-provider="{{LLM_PROVIDER}}" data-gated="{{GATED}}">
+<body data-provider="{{LLM_PROVIDER}}">
 <header class="wrap">
   <div class="header-top">
     <h1 class="brand">Phantocite</h1>
@@ -134,7 +132,6 @@
           <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><rect x="2" y="2" width="20" height="20" rx="5"/><text x="12" y="16.2" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="700" font-size="10.5" fill="#fff">tb</text></svg>
         </a>
       </span>
-      <form method="post" action="/logout" class="inline-form gated-only"><button class="btn ghost small" type="submit">Log out</button></form>
     </div>
   </div>
   <p class="sub">Upload a student paper. References are checked against OpenAlex; each citing sentence is compared with the source's abstract by an LLM.</p>
@@ -162,7 +159,7 @@
         <li><strong>OpenAlex</strong> receives only reference <em>titles and DOIs</em> — never the paper's prose, the student's name, or any body text.</li>
         <li><strong>The configured LLM provider</strong> (<span class="provider-name-copy"></span>) receives the document text (needed to locate the reference list and citing sentences) and, for the misquote check, the citation snippets plus OpenAlex abstracts — nothing more. Requests run under the site owner's API key.</li>
         <li>All three providers state that data sent via an <em>API key</em> is <strong>not used to train their models</strong> by default.</li>
-        <li><strong>Cookies.</strong> Signing in sets one session cookie that only keeps you signed in (it expires when you close the browser). After you accept cookies, <strong>Google Analytics</strong> (gtag.js) sets cookies to measure how the site is used — page views, runs, model choice — never your document, references, keys or results.</li>
+        <li><strong>Cookies.</strong> After you accept cookies, <strong>Google Analytics</strong> (gtag.js) sets cookies to measure how the site is used — page views, runs, model choice — never your document, references, keys or results.</li>
         <li>The <strong>CSV, Markdown and HTML downloads</strong> are written in your browser and never leave it. The <strong>PDF download</strong> posts the finished results table back to this server to be typeset, and the file is streamed straight back to you.</li>
         <li>This tool stores nothing: no database, no file writes, no logs of your document or keys.</li>
       </ul>
@@ -182,7 +179,7 @@
     </div>
     <div class="error hidden" id="error"></div>
   </div>
-  <p class="foot">Using EduGenAI? Follow <a href="/edugenai">these instructions</a>. <span class="gated-only">This instance runs on the site owner's API key and is password-protected (temporary). </span>The tool checks abstracts only and may produce false positives or negatives — verify results manually, and confirm that your institution's privacy policy permits this use.</p>
+  <p class="foot">Using EduGenAI? Follow <a href="/edugenai">these instructions</a>. This instance runs on the site owner's API key. The tool checks abstracts only and may produce false positives or negatives — verify results manually, and confirm that your institution's privacy policy permits this use.</p>
 
   <div id="results-area" class="hidden">
     <div class="tabs">
@@ -208,7 +205,7 @@
   <span>© Daniël van Hemert · <a href="https://www.tinybase.nl" target="_blank" rel="noopener">Tinybase</a></span>
 </footer>
 <div class="cookie-bar" id="cookie-bar" hidden>
-  <span class="cookie-text">Phantocite uses cookies to keep you signed in and to measure how the site is used (Google Analytics). Your documents, references and results never go to analytics. <a href="/#privacy">Details</a></span>
+  <span class="cookie-text">Phantocite uses cookies to measure how the site is used (Google Analytics). Your documents, references and results never go to analytics. <a href="/#privacy">Details</a></span>
   <span class="cookie-actions">
     <button class="btn primary small" type="button" id="cookie-accept">Accept cookies</button>
   </span>

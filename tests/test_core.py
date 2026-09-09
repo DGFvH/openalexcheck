@@ -1053,8 +1053,6 @@ def _stream_events(client, monkeypatch, refs, resolve=None, compare=None, budget
             for it in items:
                 yield {"id": it["id"], "verdict": "match", "explanation": "ok"}
     monkeypatch.setattr(main, "compare_contexts", compare)
-    from conftest import login
-    login(client)
     data = {"check_hallucination": "true", "check_misquote": "true"}
     with client.stream("POST", "/api/analyze", files={"file": (filename, b"%PDF-1.4 x")}, data=data) as r:
         assert r.status_code == 200
@@ -1069,10 +1067,9 @@ def _refs(n):
 
 
 def test_analyze_extraction_error_is_a_stream_event_not_http_400(monkeypatch):
-    from conftest import login
     from fastapi.testclient import TestClient
     from app import main
-    client = login(TestClient(main.app))
+    client = TestClient(main.app)
     data = {"check_hallucination": "true"}
     with client.stream("POST", "/api/analyze", files={"file": ("paper.txt", b"hello")}, data=data) as r:
         assert r.status_code == 200
@@ -1180,10 +1177,9 @@ def test_stream_close_sets_cancel(monkeypatch):
 
 def test_pages_send_nonce_csp_matching_their_scripts():
     import re as _re
-    from conftest import login
     from fastapi.testclient import TestClient
     from app import main
-    client = login(TestClient(main.app))
+    client = TestClient(main.app)
     for path in ("/", "/edugenai"):
         r = client.get(path)
         assert r.status_code == 200
@@ -1231,62 +1227,36 @@ def test_unsearchable_title_note_is_accurate(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Temporary password gate + server-side LLM key
+# Server-side LLM key
 # ---------------------------------------------------------------------------
 
-def test_gate_off_pages_open_but_key_endpoints_fail_closed(monkeypatch):
+def test_missing_server_key_is_a_clear_503(monkeypatch):
     from fastapi.testclient import TestClient
     from app import main
-    monkeypatch.delenv("SITE_PASSWORD")
+    monkeypatch.delenv("LLM_API_KEY")
     client = TestClient(main.app)
     assert client.get("/").status_code == 200
-    assert client.get("/login", follow_redirects=False).status_code == 302   # nothing to log into
     r = client.post("/api/analyze", files={"file": ("p.pdf", b"x")}, data={"check_hallucination": "true"})
-    assert r.status_code == 503 and "SITE_PASSWORD" in r.json()["detail"]
-    r = client.post("/api/compare", json={"items": []})
-    assert r.status_code == 503
+    assert r.status_code == 503 and "LLM_API_KEY" in r.json()["detail"]
+    assert client.post("/api/compare", json={"items": []}).status_code == 503
 
 
-def test_gate_on_blocks_pages_and_key_endpoints_only():
+def test_every_page_and_endpoint_is_open():
+    """No sign-in anywhere: pages, the keyless API and the key-spending
+    endpoints all answer directly."""
     from fastapi.testclient import TestClient
     from app import main
     client = TestClient(main.app)
-    r = client.get("/", follow_redirects=False)
-    assert r.status_code == 302 and r.headers["location"] == "/login?next=/"
-    assert client.get("/edugenai", follow_redirects=False).status_code == 302
-    r = client.post("/api/analyze", files={"file": ("p.pdf", b"x")}, data={"check_hallucination": "true"})
-    assert r.status_code == 401 and "Password" in r.json()["detail"]
-    assert client.post("/api/compare", json={"items": []}).status_code == 401
-    # Keyless extension endpoints, health and static assets stay open.
-    assert client.get("/api/health").status_code == 200
+    for path in ("/", "/edugenai", "/api/health", "/static/favicon.svg"):
+        assert client.get(path).status_code == 200, path
     assert client.post("/api/verify_batch", json={"references": []}).status_code == 200
     assert client.post("/api/echo", json={"m": 1}).status_code == 200
-    assert client.get("/static/favicon.svg").status_code == 200
-
-
-def test_login_flow_sets_cookie_and_rejects_wrong_password():
-    from conftest import login
-    from fastapi.testclient import TestClient
-    from app import main, auth
-    client = TestClient(main.app)
-    page = client.get("/login?next=/edugenai")
-    assert page.status_code == 200 and "script-src 'none'" in page.headers["content-security-policy"]
-    r = client.post("/login", data={"password": "nope", "next": "/"}, follow_redirects=False)
-    assert r.status_code == 401 and "Wrong password" in r.text and auth.COOKIE not in r.cookies
-    r = client.post("/login", data={"password": "test-pw", "next": "//evil.example/x"}, follow_redirects=False)
-    assert r.status_code == 303 and r.headers["location"] == "/"          # off-site next rejected
-    assert auth.COOKIE in r.cookies
-    assert client.get("/").status_code == 200                              # cookie kept by the client
-    assert '<body data-provider="openai" data-gated="1">' in client.get("/").text
-    r = client.post("/logout", follow_redirects=False)
-    assert r.status_code == 303
-    assert client.get("/", follow_redirects=False).status_code == 302
-    login(client)
-    assert client.get("/").status_code == 200
+    assert client.post("/api/report.pdf", json={"rows": [{"#": 1}]}).status_code == 200
+    home = client.get("/").text
+    assert "Log out" not in home and "sign in" not in home.lower()
 
 
 def test_compare_uses_server_key(monkeypatch):
-    from conftest import login
     from fastapi.testclient import TestClient
     from app import main
     seen = {}
@@ -1296,38 +1266,16 @@ def test_compare_uses_server_key(monkeypatch):
         return iter([{"id": 1, "verdict": "match", "explanation": "ok"}])
 
     monkeypatch.setattr(main, "compare_contexts", fake_compare)
-    client = login(TestClient(main.app))
+    client = TestClient(main.app)
     r = client.post("/api/compare", json={"items": [{"id": 1, "title": "T", "abstract": "a", "contexts": ["c"]}],
                                            "provider": "gemini", "api_key": "sk-client"})   # ignored
     assert r.status_code == 200 and seen == {"provider": "openai", "key": "sk-test"}
-
-
-def test_login_is_rate_limited(monkeypatch):
-    from fastapi.testclient import TestClient
-    from app import main
-    monkeypatch.setattr(main, "_LIMITER", main.RateLimiter({"/login": (2, 60), "*": (100, 60)}, enabled=True))
-    client = TestClient(main.app)
-    for _ in range(2):
-        assert client.post("/login", data={"password": "x"}, follow_redirects=False).status_code == 401
-    assert client.post("/login", data={"password": "x"}, follow_redirects=False).status_code == 429
-    assert client.get("/login").status_code == 200   # GET is not counted
-
-
-def test_login_cookie_is_session_scoped():
-    """No Max-Age/Expires: the password is asked again in every new browser session."""
-    from fastapi.testclient import TestClient
-    from app import main
-    r = TestClient(main.app).post("/login", data={"password": "test-pw", "next": "/"}, follow_redirects=False)
-    cookie = r.headers["set-cookie"].lower()
-    assert "phantocite_auth=" in cookie and "max-age" not in cookie and "expires" not in cookie
-    assert "httponly" in cookie and "samesite=lax" in cookie
 
 
 # The output-token cap is fixed server-side: a posted 'max_tokens' (old cached
 # page) is ignored and /api/compare is clamped to the same limit. The page
 # carries the capacity note with the server's numbers.
 def test_token_limit_is_fixed_server_side(monkeypatch):
-    from conftest import login
     from fastapi.testclient import TestClient
     from app import main
     seen = {}
@@ -1337,7 +1285,7 @@ def test_token_limit_is_fixed_server_side(monkeypatch):
         yield '{"type":"ready"}\n'
 
     monkeypatch.setattr(main, "_run_stream", fake_stream)
-    client = login(TestClient(main.app))
+    client = TestClient(main.app)
     r = client.post("/api/analyze", files={"file": ("p.pdf", b"x")},
                     data={"check_hallucination": "true", "max_tokens": "64000",
                           "openalex_key": "  "})
@@ -1372,10 +1320,9 @@ def test_long_document_warns_in_progress_log(monkeypatch):
 
 
 def test_cookie_bar_and_consent_mode_on_both_pages():
-    from conftest import login
     from fastapi.testclient import TestClient
     from app import main
-    client = login(TestClient(main.app))
+    client = TestClient(main.app)
     for path in ("/", "/edugenai"):
         html = client.get(path).text
         # GA starts with analytics cookies denied; the bar's buttons flip it.
@@ -1383,24 +1330,19 @@ def test_cookie_bar_and_consent_mode_on_both_pages():
         assert 'id="cookie-bar" hidden' in html
         assert 'id="cookie-accept"' in html and "Accept cookies" in html
         assert html.index("gtag('consent', 'default'") < html.index("gtag('config'")
-    assert "session cookie" in client.get("/login").text
 
 
 # PDF export: the browser posts the rows it already built for the other
 # downloads and gets a typeset report back. Values come from a student's
 # document, so hostile text must not reach the PDF engine unescaped.
 def test_report_pdf_export():
-    from conftest import login
     from fastapi.testclient import TestClient
     from app import main, report
 
     rows = [{"#": 1, "Status": "Verified", "Priority": "Review",
              "Reference (as printed)": "Shannon & Weaver (1948) <b>x</b> & y",
              "Year ref / OA": " / ", "OpenAlex URL": "https://openalex.org/W1"}]
-    anon = TestClient(main.app)
-    assert anon.post("/api/report.pdf", json={"rows": rows}).status_code == 401
-
-    client = login(TestClient(main.app))
+    client = TestClient(main.app)
     r = client.post("/api/report.pdf", json={"rows": rows, "summary": ["1 reference"]})
     assert r.status_code == 200 and r.headers["content-type"] == "application/pdf"
     assert r.content.startswith(b"%PDF") and len(r.content) > 800

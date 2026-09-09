@@ -76,17 +76,8 @@ def _install(monkeypatch, refs, orphans=(), resolve=None, compare=None):
     monkeypatch.setattr(main, "compare_contexts", compare)
 
 
-def _login(page, base_url, password="test-pw"):
-    page.goto(base_url + "/login", wait_until="domcontentloaded")
-    page.fill("input[name=password]", password)
-    page.click("button[type=submit]")
-    page.wait_for_url(base_url + "/")
-
-
 def _run(page, base_url):
     page.goto(base_url + "/", wait_until="networkidle")
-    if page.url.endswith("/login?next=/"):
-        _login(page, base_url)
     page.set_input_files("#file", {"name": "paper.pdf", "mimeType": "application/pdf", "buffer": b"%PDF-1.4 x"})
     page.click("#run")
     page.wait_for_function("() => ['Done.','Stopped — partial results.','Failed.'].includes(document.getElementById('progress-status').textContent) || !document.getElementById('run').classList.contains('hidden')", timeout=15000)
@@ -168,21 +159,16 @@ def test_csv_export_guards_formula_cells(browser, base_url, monkeypatch):
     page.close()
 
 
-def test_password_gate_in_browser(browser, base_url):
+def test_page_offers_no_key_fields_and_renders_the_sample(browser, base_url):
     page = browser.new_page()
     page.goto(base_url + "/", wait_until="domcontentloaded")
-    assert page.url.endswith("/login?next=/")
-    page.fill("input[name=password]", "wrong")
-    page.click("button[type=submit]")
-    page.wait_for_selector(".err")
-    _login(page, base_url)
+    assert "login" not in page.url          # the site is open, no sign-in
     assert page.locator("#llm-note").count() == 0 and page.locator("#model").count() == 0
     assert page.locator("#api_key").count() == 0 and page.locator("#provider").count() == 0
     assert "Custom" not in page.locator("#model_select").inner_text()
     assert page.locator("#max_tokens").count() == 0 and page.locator("#openalex_key").count() == 0
     assert "Advanced options" not in page.inner_text("#form-card")
     assert "pages" in page.inner_text("#capacity-note") and "references" in page.inner_text("#capacity-note")
-    assert page.is_visible("text=Log out")
     page.click("#sample")
     page.wait_for_timeout(500)
     assert page.evaluate("document.querySelectorAll('#screen-results .ref').length") == 5
@@ -205,7 +191,7 @@ def test_password_gate_in_browser(browser, base_url):
 
 def test_cookie_bar_acceptance_is_remembered(browser, base_url):
     page = browser.new_page()
-    _login(page, base_url)
+    page.goto(base_url + "/", wait_until="domcontentloaded")
     assert page.is_visible("#cookie-bar")
     page.reload(wait_until="domcontentloaded")
     assert page.is_visible("#cookie-bar")          # stays until accepted

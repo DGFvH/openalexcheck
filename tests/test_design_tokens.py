@@ -19,8 +19,6 @@ def _style_blocks(html: str) -> str:
 def _page_styles():
     yield "index.html", _style_blocks((STATIC / "index.html").read_text())
     yield "edugenai.html", _style_blocks((STATIC / "edugenai.html").read_text())
-    from app import auth
-    yield "login", _style_blocks(auth.login_page("/").body.decode())
 
 
 def test_ui_css_defines_the_whole_vocabulary():
@@ -57,8 +55,6 @@ def test_page_styles_are_layout_only():
 def test_pages_link_the_shared_stylesheet():
     for name in ("index.html", "edugenai.html"):
         assert '<link rel="stylesheet" href="/static/ui.css">' in (STATIC / name).read_text()
-    from app import auth
-    assert "/static/ui.css" in auth.login_page("/").body.decode()
 
 
 # Results screen: colour means verdict and lives only in chips and the field
