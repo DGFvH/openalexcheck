@@ -47,8 +47,8 @@ from .llm import LLMClient, LLMError
 from .openalex import OpenAlexAuthError, _client as _openalex_client, resolve_reference
 
 # openapi_url=None: the auto-generated schema would advertise every route and
-# its request shape. The one schema meant to be consumed is published
-# deliberately at /openapi/edugenai.json.
+# its request shape. Nothing consumes it — the one tool meant to be called from
+# outside is described over MCP instead (app/mcp_server.py).
 app = FastAPI(title="openalexcheck", docs_url=None, redoc_url=None, openapi_url=None)
 log = logging.getLogger("phantocite.main")
 
@@ -749,7 +749,7 @@ def _run_batch(items: list, key: Optional[str]) -> list[dict]:
 # indistinguishable from a parsing failure on the current one.
 # Deployment marker, returned by the verify endpoints (and /api/echo). BUMP on
 # every deploy so "is production current?" stays answerable from a response.
-API_VERSION = "2026-09-03.22"
+API_VERSION = "2026-09-03.23"
 
 
 def _from_query(request: Request) -> tuple[list, Optional[str]]:
@@ -860,17 +860,6 @@ def _redact_transport(text: str) -> str:
     text = _JSON_FIELD.sub(lambda m: m.group(1) + "•••redacted•••" + m.group(3), text)
     text = _FORM_FIELD.sub(lambda m: m.group(1) + "•••redacted•••", text)
     return _KEY_SHAPED.sub("•••redacted•••", text)
-
-
-@app.get("/openapi/edugenai.json")
-def edugenai_tool_schema():
-    """The OpenAPI document eduGenAI 2 (LibreChat) imports to build its Action.
-    Public and cacheable: it describes one keyless endpoint, nothing secret."""
-    return JSONResponse(
-        toolspec.openapi_document(SITE_URL, API_VERSION),
-        headers={"Cache-Control": "public, max-age=300",
-                 "Access-Control-Allow-Origin": "*"},
-    )
 
 
 @app.get("/api/echo")

@@ -2,9 +2,8 @@
 
 eduGenAI 2 (LibreChat build 2026.8.x) has no OpenAPI action import: its Personas
 carry no tools section, and its Extensions panel accepts only a "URL of MCP
-server". So the tool published at /openapi/edugenai.json has no consumer there,
-and the same operation is served here over MCP instead. The schema is imported
-from `toolspec`, so the two descriptions cannot drift.
+server". So the reference check is served here over MCP. The tool's arguments
+come from `toolspec`, which is the one place they are described.
 
 Design notes
 ------------
@@ -38,7 +37,7 @@ LATEST_PROTOCOL = "2025-06-18"
 SUPPORTED_PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 TOOL_NAME = "verify_references"
 
-# The same operation the OpenAPI document describes, in MCP's shape.
+# The one tool this server advertises.
 VERIFY_REFERENCES_TOOL: dict[str, Any] = {
     "name": TOOL_NAME,
     "title": "Verify a paper's references against OpenAlex",

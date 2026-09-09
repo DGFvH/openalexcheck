@@ -1422,33 +1422,9 @@ def test_link_preview_metadata_is_absolute():
     assert r.content.startswith(b"\x89PNG")
 
 
-# eduGenAI 2 runs LibreChat, whose agents build a tool from an OpenAPI schema.
-# The published document must stay importable: one operation, and a servers URL
-# matching the domain the action calls (LibreChat rejects a mismatch).
-def test_edugenai_tool_schema_is_importable():
-    from fastapi.testclient import TestClient
-    from app import main
-    client = TestClient(main.app)
-    r = client.get("/openapi/edugenai.json")
-    assert r.status_code == 200
-    doc = r.json()
-    assert doc["openapi"].startswith("3.0")
-    assert doc["servers"] == [{"url": main.SITE_URL}]
-    assert list(doc["paths"]) == ["/api/verify_batch"]
-    op = doc["paths"]["/api/verify_batch"]["post"]
-    assert op["operationId"] == "verify_references"
-    assert op["description"] and op["summary"]
-    body = op["requestBody"]["content"]["application/json"]["schema"]
-    assert body["required"] == ["references"]
-    props = body["properties"]["references"]["items"]["properties"]
-    assert {"title", "authors", "year", "doi", "journal", "pages"} <= set(props)
-    assert "$ref" not in r.text          # inlined: no resolution needed
-    # The route the schema advertises must exist on this very app.
-    assert any(getattr(route, "path", None) == "/api/verify_batch" for route in main.app.routes)
-
-
-def test_edugenai_schema_request_shape_is_accepted(monkeypatch):
-    """Contract: a request built exactly as the schema documents must work."""
+# Contract: the argument names the tool advertises are the ones the endpoint
+# accepts. Holds whether or not any schema document is published.
+def test_documented_reference_fields_are_accepted(monkeypatch):
     from fastapi.testclient import TestClient
     from app import main, toolspec
 
@@ -1471,8 +1447,7 @@ def test_edugenai_page_documents_the_new_flow():
     assert "whitelist" in html and "edugenai@npuls.nl" in html   # the blocker, up front
     assert "Temporarily offline" not in html and "Add Action" not in html
     assert "verify_references" in html
-    # the OpenAPI document is still offered, for platforms that import one
-    assert f"{main.SITE_URL}/openapi/edugenai.json" in html
+    assert "openapi" not in html.lower()          # no schema is published
 
 
 # Terms of use: reachable, linked from where a document is uploaded, and the
@@ -1496,14 +1471,16 @@ def test_terms_page_and_consent_line():
         assert 'href="/terms"' in client.get(path).text, path
 
 
-def test_no_auto_generated_openapi_inventory():
+def test_no_schema_document_is_published():
     from fastapi.testclient import TestClient
     from app import main
     client = TestClient(main.app)
     assert client.get("/openapi.json").status_code == 404
     assert client.get("/docs").status_code == 404
-    # The one schema meant to be consumed is still published.
-    assert client.get("/openapi/edugenai.json").status_code == 200
+    assert client.get("/openapi/edugenai.json").status_code == 404
+    # The one tool meant to be called from outside is described over MCP.
+    assert client.post("/mcp", json={"jsonrpc": "2.0", "id": 1,
+                                     "method": "tools/list"}).status_code == 200
 
 
 # ---------------------------------------------------------------------------

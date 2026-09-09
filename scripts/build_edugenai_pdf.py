@@ -53,7 +53,6 @@ NOTE = ParagraphStyle("NOTE", parent=BODY, backColor=HexColor("#fbf7ec"),
 
 HOST = "https://www.phantocite.com"
 MCP_URL = f"{HOST}/mcp"
-SCHEMA_URL = f"{HOST}/openapi/edugenai.json"
 MCP_CURL = ("curl -s -X POST " + MCP_URL + " \\\n"
             '  -H "Content-Type: application/json" \\\n'
             '  -d \'{"jsonrpc":"2.0","id":1,"method":"tools/list"}\'')
@@ -205,13 +204,6 @@ def build():
                            "any terminal — a healthy deployment answers in a couple of "
                            "seconds with count: 1 and a Verified result:", BODY))
     story.append(code(CURL))
-
-    story.append(Paragraph("Using it somewhere else", H2))
-    story.append(Paragraph(
-        "Platforms that import an OpenAPI schema instead of connecting to an MCP server — "
-        "ChatGPT custom actions, other LibreChat builds — can use the same operation from "
-        f"<font face='Courier'>{SCHEMA_URL}</font>. It describes the same one tool, against "
-        "POST /api/verify_batch, and the Step 2 instructions apply unchanged.", BODY))
 
     story.append(Paragraph("Notes & limits", H2))
     story.append(bullets(

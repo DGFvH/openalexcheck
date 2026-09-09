@@ -275,9 +275,6 @@ NEVER invent a DOI, an author, a year or a verdict the tool did not return. stat
   <div class="panel tone-info note"><strong>So, does “all data go through me”?</strong> No — only the bibliographic metadata of the references, and only in transit. The endpoint reads just those fields; the citing sentences aren't part of what the action sends, and anything else that were included would be discarded unread (never logged or stored). <strong>Just the function call?</strong> Yes; that is the only thing that reaches your server. <strong>Is it logged?</strong> Not by this app — it is stateless (no database, no file writes) and never logs request bodies or keys. Whatever hosting stack or reverse proxy you deploy behind may keep its own access log (request line: method + path + status, not bodies) — that part is under your control, and you can turn it down.
   <br><br><strong>One caveat about the OpenAlex Premium key:</strong> it is used per-request, never stored, and scrubbed from any error message this app returns. But when your endpoint calls OpenAlex, the key travels as a query parameter on the outbound URL — so if you run behind an <em>egress</em> proxy that logs full outbound URLs, it could appear there. If that matters, don't set a Premium key (the tool works fine without one) or use a proxy that redacts query strings.</div>
 
-  <h2>Using it somewhere else</h2>
-  <p>Platforms that import an <strong>OpenAPI schema</strong> instead of connecting to an MCP server — ChatGPT custom actions, other LibreChat builds — can use the same operation from <code class="inline" id="c-schema-url">https://www.phantocite.com/openapi/edugenai.json</code>. It describes the same one tool, against <code class="inline">POST /api/verify_batch</code>, and the Step 2 instructions apply unchanged.</p>
-
   <h2>Notes &amp; limits</h2>
   <ul>
     <li>No LLM key is stored or used by the extension; OpenAlex is free and needs no key. The persona's own model runs on eduGenAI's side, under its terms.</li>
@@ -318,7 +315,7 @@ NEVER invent a DOI, an author, a year or a verdict the tool did not return. stat
     var origin = window.location.origin;
     if (!/^https?:\/\//.test(origin)) return;
     document.querySelectorAll("#host-token").forEach(function (el) { el.textContent = origin; });
-    ["c-schema-url", "c-mcp-url", "c-mcp-curl", "c-curl", "c-echo-curl"].forEach(function (id) {
+    ["c-mcp-url", "c-mcp-curl", "c-curl", "c-echo-curl"].forEach(function (id) {
       var el = document.getElementById(id);
       if (el) el.textContent = el.textContent
         .replace("https://YOUR-DEPLOYMENT-HOST", origin)

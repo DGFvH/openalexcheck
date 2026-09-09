@@ -172,12 +172,10 @@ section at all. So the app runs an **MCP server** (Streamable HTTP) at
 and be counted against this deployment's own rate limit. `/mcp` is rate-limited
 like the other keyless endpoints.
 
-The same operation is also published as an **OpenAPI document** at
-**`/openapi/edugenai.json`** for platforms that import one instead (ChatGPT
-actions, other LibreChat builds). Both are rendered from one description in
-`app/toolspec.py`, so they cannot drift. The app's own FastAPI schema is
-deliberately not served; it describes every route, including the
-browser-facing ones.
+The tool's arguments are described once in `app/toolspec.py`. No OpenAPI
+schema is published: the app's own FastAPI document describes every route,
+including the browser-facing ones, so it is switched off, and nothing else
+consumes one.
 
 Registering the extension additionally requires Npuls to **whitelist the
 domain** (`edugenai@npuls.nl`) — nothing in this repo works around that.
