@@ -216,3 +216,17 @@ def test_pdf_export_downloads_a_real_pdf(browser, base_url, monkeypatch):
         assert fh.read(5).startswith(b"%PDF")
     assert page.is_hidden("#error") or "PDF" not in page.inner_text("#error")
     page.close()
+
+
+def test_edugenai_setup_is_collapsed_behind_the_status_note(browser, base_url):
+    """The integration cannot be used until the domain is whitelisted, so the
+    page leads with that and hides the steps until asked."""
+    page = browser.new_page()
+    page.goto(base_url + "/edugenai", wait_until="domcontentloaded")
+    assert page.is_visible("#status")
+    assert "unavailable for now" in page.inner_text("#status")
+    assert page.is_hidden("#c-mcp-url")                    # the steps are folded away
+    page.click("details.setup > summary")
+    assert page.is_visible("#c-mcp-url")
+    assert "Add extension" in page.inner_text("details.setup")
+    page.close()

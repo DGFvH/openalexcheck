@@ -68,6 +68,9 @@
   .copy:hover { background: var(--accent); }
   .field-label { display: block; font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-top: .75rem; }
   .note { font-size: var(--fs-sm); margin: .75rem 0; }
+  details.setup > summary { display: inline-block; margin: 1rem 0 .5rem; font-size: var(--fs-sm); font-weight: 600; color: var(--accent); }
+  details.setup > summary::before { content: "▸ "; display: inline-block; transition: transform .15s; }
+  details.setup[open] > summary::before { transform: rotate(90deg); }
 </style>
 </head>
 <body>
@@ -94,14 +97,16 @@
     </div>
   </div>
   <p class="sub">Connect an eduGenAI 2 persona to this <strong>MCP server</strong> and it verifies a paper's references against OpenAlex — inside your own chat, with no API key of your own.</p>
-  <div class="panel tone-info note" role="status"><strong>Written for eduGenAI 2.</strong> eduGenAI 1 was withdrawn after vulnerabilities were found in an audit, and its Extension builder went with it. eduGenAI 2 (<code class="inline">edugenai2.npuls.nl</code>, sign in with SRAM) takes external tools one way only: <strong>Extensions → URL of MCP server</strong>. Its Personas have no tools section at all. So this app runs an <strong>MCP server</strong> at <code class="inline">/mcp</code>, and you register that URL.</div>
-  <div class="panel tone-warn note" role="status"><strong>Read this first: the domain must be whitelisted.</strong> The extension form says so outright — an MCP URL on a domain Npuls has not allowed cannot be registered at all. Mail <a href="mailto:edugenai@npuls.nl">edugenai@npuls.nl</a> and ask them to whitelist <code class="inline">www.phantocite.com</code> for use as an extension. Nothing on this side works around it, so start that email before the steps below.</div>
-  <div class="topbar">
-    <a class="btn primary" href="/static/edugenai-instructions.pdf" download>⬇ Download PDF version</a>
-    <a class="btn secondary" href="/">Open the standalone tool</a>
-  </div>
+  <div class="panel tone-warn note" id="status" role="status"><strong>eduGenAI is unavailable for now.</strong> The integration is built and tested, but it cannot be registered until <strong>Npuls whitelists this domain</strong> — the extension form rejects any MCP server URL on a domain they have not allowed. Mail <a href="mailto:edugenai@npuls.nl">edugenai@npuls.nl</a> and ask them to allow <code class="inline">www.phantocite.com</code> as an extension domain. Until then, the checker runs here: <a href="/">open the standalone tool</a>.</div>
 </header>
 <main class="wrap">
+<details class="setup">
+  <summary>Show the setup instructions anyway</summary>
+  <div class="topbar">
+    <a class="btn primary" href="/static/edugenai-instructions.pdf" download>Download PDF version</a>
+    <a class="btn secondary" href="/">Open the standalone tool</a>
+  </div>
+
 
   <h2>How it works</h2>
   <p>Two separate objects on the platform. A <strong>Persona</strong> is a saved assistant with its own instructions and model. An <strong>Extension</strong> is a connection to an <strong>MCP server</strong> — a small service that advertises tools over a standard protocol. You create both, then switch the extension on in a chat. The work splits cleanly in two:</p>
@@ -283,6 +288,7 @@ NEVER invent a DOI, an author, a year or a verdict the tool did not return. stat
     <li>Batch requests are capped at 200 references.</li>
   </ul>
 
+</details>
 </main>
 <footer class="wrap credit">
   <p class="small muted" style="flex-basis:100%;margin:0 0 .5rem">This page is served by Phantocite itself, at <code class="inline">/edugenai</code>, and is the authoritative version. The PDF is a printable copy of the same steps.</p>

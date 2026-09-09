@@ -1444,6 +1444,9 @@ def test_edugenai_page_documents_the_new_flow():
     html = TestClient(main.app).get("/edugenai").text
     assert f"{main.SITE_URL}/mcp" in html          # the URL you register
     assert "Add extension" in html and "Streamable HTTP" in html
+    # The page leads with the blocker; the steps are folded away behind it.
+    assert "eduGenAI is unavailable for now" in html
+    assert '<details class="setup">' in html and '<details class="setup" open' not in html
     assert "whitelist" in html and "edugenai@npuls.nl" in html   # the blocker, up front
     assert "Temporarily offline" not in html and "Add Action" not in html
     assert "verify_references" in html
