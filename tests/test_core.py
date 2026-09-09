@@ -1470,3 +1470,34 @@ def test_edugenai_page_documents_the_new_flow():
     assert "Agent Builder" in html and "Add Action" in html
     assert "Temporarily offline" not in html and "Extension builder</strong>" not in html
     assert "verify_references" in html
+
+
+# Terms of use: reachable, linked from where a document is uploaded, and the
+# app no longer publishes an auto-generated inventory of every route.
+def test_terms_page_and_consent_line():
+    from fastapi.testclient import TestClient
+    from app import main
+    client = TestClient(main.app)
+    terms = client.get("/terms")
+    assert terms.status_code == 200
+    for heading in ("What you are responsible for", "no warranty", "Liability",
+                    "What happens to your document"):
+        assert heading in terms.text, heading
+    assert "{{" not in terms.text                       # tokens substituted
+
+    home = client.get("/").text
+    consent = home[home.index('id="consent"'):home.index("</p>", home.index('id="consent"'))]
+    assert "confirm that you may share it" in consent and 'href="/terms"' in consent
+    assert "personal data" in consent
+    for path in ("/", "/edugenai"):          # the terms page does not link to itself
+        assert 'href="/terms"' in client.get(path).text, path
+
+
+def test_no_auto_generated_openapi_inventory():
+    from fastapi.testclient import TestClient
+    from app import main
+    client = TestClient(main.app)
+    assert client.get("/openapi.json").status_code == 404
+    assert client.get("/docs").status_code == 404
+    # The one schema meant to be consumed is still published.
+    assert client.get("/openapi/edugenai.json").status_code == 200

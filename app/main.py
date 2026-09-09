@@ -46,7 +46,10 @@ from .keysafety import redact
 from .llm import LLMClient, LLMError
 from .openalex import OpenAlexAuthError, _client as _openalex_client, resolve_reference
 
-app = FastAPI(title="openalexcheck", docs_url=None, redoc_url=None)
+# openapi_url=None: the auto-generated schema would advertise every route and
+# its request shape. The one schema meant to be consumed is published
+# deliberately at /openapi/edugenai.json.
+app = FastAPI(title="openalexcheck", docs_url=None, redoc_url=None, openapi_url=None)
 log = logging.getLogger("phantocite.main")
 
 # The /api/verify* endpoints are a public, keyless OpenAlex wrapper meant to be
@@ -744,7 +747,7 @@ def _run_batch(items: list, key: Optional[str]) -> list[dict]:
 # indistinguishable from a parsing failure on the current one.
 # Deployment marker, returned by the verify endpoints (and /api/echo). BUMP on
 # every deploy so "is production current?" stays answerable from a response.
-API_VERSION = "2026-09-03.20"
+API_VERSION = "2026-09-03.21"
 
 
 def _from_query(request: Request) -> tuple[list, Optional[str]]:
@@ -900,6 +903,11 @@ def api_health():
     sha = (os.environ.get("VERCEL_GIT_COMMIT_SHA") or "")[:12] or None
     return {"status": "ok", "api_version": API_VERSION, "git_sha": sha,
             "polite_pool": bool(os.environ.get("OPENALEX_MAILTO"))}
+
+
+@app.get("/terms")
+def terms():
+    return _page("terms.html")
 
 
 @app.get("/edugenai")

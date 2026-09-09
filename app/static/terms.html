@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-DXHMX17XQ1"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  // Consent Mode: analytics cookies are set once the visitor accepts the
+  // cookie bar (the acceptance is remembered in localStorage, nowhere else).
+  gtag('consent', 'default', {analytics_storage: 'denied', ad_storage: 'denied',
+                              ad_user_data: 'denied', ad_personalization: 'denied'});
+  try { if (localStorage.getItem('phantocite_cookies') === 'all') gtag('consent', 'update', {analytics_storage: 'granted'}); } catch (e) {}
+  gtag('js', new Date());
+  gtag('config', 'G-DXHMX17XQ1');
+</script>
+<title>Phantocite — Terms of use</title>
+<meta name="description" content="Terms of use for Phantocite: what the citation checker does, what you are responsible for when you upload a document, and the limits of the results.">
+<link rel="canonical" href="{{SITE_URL}}/terms">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Phantocite">
+<meta property="og:title" content="Phantocite — Terms of use">
+<meta property="og:description" content="What the citation checker does, what you are responsible for when you upload a document, and the limits of the results.">
+<meta property="og:url" content="{{SITE_URL}}/terms">
+<meta property="og:image" content="{{SITE_URL}}/static/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32.png">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="stylesheet" href="/static/ui.css">
+<style>
+  /* Layout only — every font, size, colour and radius comes from ui.css. */
+  header.wrap { padding-top: 2rem; padding-bottom: .5rem; }
+  .back { display: inline-block; font-size: var(--fs-sm); color: var(--muted); text-decoration: none; }
+  .back:hover { color: var(--accent); }
+  h1 .brand { color: var(--accent); }
+  .sub { color: var(--muted); margin: .35rem 0 0; }
+  main.wrap { padding-bottom: 2rem; }
+  main.wrap li { margin-bottom: .4rem; }
+  .credit { display: flex; flex-wrap: wrap; justify-content: center; text-align: center; padding: 1.5rem; margin-top: 3rem; border-top: 1px solid var(--border); font-size: var(--fs-sm); color: var(--muted); }
+  .credit a { color: var(--muted); }
+  .credit a:hover { color: var(--accent); }
+  .credit .tb-link { display: inline-flex; align-items: center; gap: .3rem; }
+  .updated { font-size: var(--fs-sm); color: var(--muted); }
+</style>
+</head>
+<body>
+<header class="wrap">
+  <a class="back" href="/">← Back to Phantocite</a>
+  <h1 style="margin-top:.6rem">Terms of use</h1>
+  <p class="sub"><span class="brand">Phantocite</span> checks whether the sources cited in a paper exist and whether they are cited for what they actually say. Using it means accepting the terms below.</p>
+</header>
+<main class="wrap">
+  <p class="updated">Last updated 9 September 2026.</p>
+
+  <h2>1. What this tool is</h2>
+  <p>Phantocite is a free aid for checking references. It looks each reference up in <a href="https://openalex.org" target="_blank" rel="noopener">OpenAlex</a>, compares the printed details with that record, and asks a language model whether each citing sentence matches the abstract of the source.</p>
+  <p>It is an aid, not an authority. It produces <strong>leads for a human reviewer</strong>. It is not a plagiarism service, not a grading instrument, and not evidence of academic misconduct. Any decision about a person must rest on your own reading of the sources, never on this output alone.</p>
+
+  <h2>2. What you are responsible for</h2>
+  <p>You are responsible for what you upload. By uploading a document you confirm that:</p>
+  <ul>
+    <li>you are <strong>entitled to share it</strong> with this service, and with the third parties named in section 4;</li>
+    <li>it contains <strong>no personal data</strong> that should not leave your institution — in particular, that student names and other identifying details have been removed, and that no special-category data (health, beliefs, and the rest) is present;</li>
+    <li>uploading it is permitted by <strong>your institution's own policy</strong> on generative AI, privacy and assessment, which you have checked;</li>
+    <li>you are not using the results for a prohibited or high-risk purpose, such as deciding admission, determining a grade, or monitoring a person.</li>
+  </ul>
+  <p>Documents are processed as they arrive. This service cannot tell whether a document has been anonymised, and does not try to. If you upload personal data, that is your act and your responsibility as the controller of it, not the operator's.</p>
+
+  <h2>3. Accuracy — no warranty</h2>
+  <p>The tool is provided <strong>as is</strong>, with no warranty of any kind. In particular:</p>
+  <ul>
+    <li>It <strong>produces false positives and false negatives.</strong> A real work can be reported as missing when OpenAlex indexes it oddly or not at all; a fabricated one can occasionally match something.</li>
+    <li>The misquote judgement is made from the <strong>abstract only</strong>. A claim that the full text supports but the abstract does not may be flagged wrongly.</li>
+    <li>Metadata differences often reflect the record, not the paper — an online-first year against an issue year, for example.</li>
+    <li>Long documents may be checked only in part, within the server's time budget, and are marked as partial when that happens.</li>
+  </ul>
+  <p>Verify every flag by hand before you act on it.</p>
+
+  <h2>4. What happens to your document</h2>
+  <ul>
+    <li><strong>The language model provider</strong> receives the document's text, in order to find the reference list and the citing sentences, and receives the citation snippets and OpenAlex abstracts for the misquote check.</li>
+    <li><strong>OpenAlex</strong> receives reference titles and DOIs only — never the paper's prose, and never a name from the document.</li>
+    <li><strong>Nothing is stored.</strong> There is no database and no file storage. Your document exists in memory for the length of the run and is then gone. Results live in your browser only; downloads are produced from what is already on your screen.</li>
+    <li><strong>Analytics</strong> (Google Analytics, after you accept cookies) records page views and usage, never your document, references or results.</li>
+  </ul>
+  <p>Hosting and network providers may keep their own short-lived request logs, which record the fact of a request rather than its content.</p>
+
+  <h2>5. Liability</h2>
+  <p>The operator provides this tool free of charge and accepts <strong>no liability</strong> for any loss or damage arising from its use, from its results, or from its unavailability, to the fullest extent the law allows. That includes any consequence of a document being uploaded in breach of section 2 — that responsibility is the uploader's.</p>
+  <p>Nothing here limits liability that cannot be limited by law.</p>
+
+  <h2>6. Fair use of the service</h2>
+  <p>The analysis runs on the operator's own API credit. Please use the tool for its purpose and at a human pace. Automated or bulk use, or any attempt to exhaust the service or its credit, is not permitted, and access may be rate-limited, restricted or withdrawn at any time, without notice.</p>
+
+  <h2>7. Changes</h2>
+  <p>These terms may change; the current version is always the one on this page, with the date at the top. Continuing to use the tool after a change means accepting it.</p>
+
+  <h2>8. Contact</h2>
+  <p>Phantocite is operated by Daniël van Hemert (<a href="https://www.tinybase.nl" target="_blank" rel="noopener">Tinybase</a>). For questions about these terms, or to ask that something be looked into, use the contact details at <a href="https://danielvanhemert.com" target="_blank" rel="noopener">danielvanhemert.com</a>.</p>
+</main>
+<footer class="wrap credit">
+  <span>© Daniël van Hemert · <a class="tb-link" href="https://www.tinybase.nl" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><rect x="2" y="2" width="20" height="20" rx="5"/><text x="12" y="16.2" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="700" font-size="10.5" fill="#fff">tb</text></svg>Tinybase</a></span>
+</footer>
+<div class="cookie-bar" id="cookie-bar" hidden>
+  <span class="cookie-text">Phantocite uses cookies to measure how the site is used (Google Analytics). Your documents, references and results never go to analytics. <a href="/#privacy">Details</a></span>
+  <span class="cookie-actions">
+    <button class="btn primary small" type="button" id="cookie-accept">Accept cookies</button>
+  </span>
+</div>
+<script>
+(function () {
+  var bar = document.getElementById("cookie-bar"), KEY = "phantocite_cookies";
+  function accepted() { try { return localStorage.getItem(KEY) === "all"; } catch (e) { return false; } }
+  if (!accepted()) bar.hidden = false;
+  document.getElementById("cookie-accept").addEventListener("click", function () {
+    try { localStorage.setItem(KEY, "all"); } catch (e) {}
+    if (window.gtag) gtag("consent", "update", {analytics_storage: "granted"});
+    bar.hidden = true;
+  });
+})();
+</script>
+</body>
+</html>
