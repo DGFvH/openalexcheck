@@ -39,7 +39,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse, Respons
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import report
+from . import report, toolspec
 from .analysis import compare_contexts, extract_references
 from .extract import ExtractionError, extract_text
 from .keysafety import redact
@@ -744,7 +744,7 @@ def _run_batch(items: list, key: Optional[str]) -> list[dict]:
 # indistinguishable from a parsing failure on the current one.
 # Deployment marker, returned by the verify endpoints (and /api/echo). BUMP on
 # every deploy so "is production current?" stays answerable from a response.
-API_VERSION = "2026-09-03.19"
+API_VERSION = "2026-09-03.20"
 
 
 def _from_query(request: Request) -> tuple[list, Optional[str]]:
@@ -837,6 +837,17 @@ def _redact_transport(text: str) -> str:
     text = _JSON_FIELD.sub(lambda m: m.group(1) + "•••redacted•••" + m.group(3), text)
     text = _FORM_FIELD.sub(lambda m: m.group(1) + "•••redacted•••", text)
     return _KEY_SHAPED.sub("•••redacted•••", text)
+
+
+@app.get("/openapi/edugenai.json")
+def edugenai_tool_schema():
+    """The OpenAPI document eduGenAI 2 (LibreChat) imports to build its Action.
+    Public and cacheable: it describes one keyless endpoint, nothing secret."""
+    return JSONResponse(
+        toolspec.openapi_document(SITE_URL, API_VERSION),
+        headers={"Cache-Control": "public, max-age=300",
+                 "Access-Control-Allow-Origin": "*"},
+    )
 
 
 @app.get("/api/echo")

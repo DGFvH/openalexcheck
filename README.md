@@ -163,9 +163,17 @@ the misquote reasoning with the returned abstracts. An optional OpenAlex
 Premium key can be supplied via the `X-OpenAlex-Key` header (ideal for the
 extension's secure/Key-Vault header store).
 
-Step-by-step setup instructions (with the exact function schema and a
-downloadable PDF) are served by the app itself at **`/edugenai`**, and linked
-from the main page. To regenerate the PDF after editing the instructions:
+**eduGenAI 2** (`edugenai2.npuls.nl`) runs LibreChat, whose agents build tools
+from an OpenAPI schema rather than from a hand-written function definition, so
+the app publishes one at **`/openapi/edugenai.json`** (`app/toolspec.py`): a
+single operation, `verify_references`, with `servers` set to the live
+`SITE_URL` — LibreChat rejects an action whose domain differs from that. The
+app's own FastAPI schema is deliberately not used; it describes every route,
+including the browser-facing ones.
+
+Step-by-step setup instructions (create an agent, paste the instructions, add
+the action) and a downloadable PDF are served at **`/edugenai`**, linked from
+the main page. To regenerate the PDF after editing the instructions:
 
 ```bash
 pip install -r requirements-dev.txt

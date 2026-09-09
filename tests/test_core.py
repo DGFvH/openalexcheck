@@ -1420,3 +1420,53 @@ def test_link_preview_metadata_is_absolute():
     r = client.get("/static/og-image.png")
     assert r.status_code == 200 and r.headers["content-type"] == "image/png"
     assert r.content.startswith(b"\x89PNG")
+
+
+# eduGenAI 2 runs LibreChat, whose agents build a tool from an OpenAPI schema.
+# The published document must stay importable: one operation, and a servers URL
+# matching the domain the action calls (LibreChat rejects a mismatch).
+def test_edugenai_tool_schema_is_importable():
+    from fastapi.testclient import TestClient
+    from app import main
+    client = TestClient(main.app)
+    r = client.get("/openapi/edugenai.json")
+    assert r.status_code == 200
+    doc = r.json()
+    assert doc["openapi"].startswith("3.0")
+    assert doc["servers"] == [{"url": main.SITE_URL}]
+    assert list(doc["paths"]) == ["/api/verify_batch"]
+    op = doc["paths"]["/api/verify_batch"]["post"]
+    assert op["operationId"] == "verify_references"
+    assert op["description"] and op["summary"]
+    body = op["requestBody"]["content"]["application/json"]["schema"]
+    assert body["required"] == ["references"]
+    props = body["properties"]["references"]["items"]["properties"]
+    assert {"title", "authors", "year", "doi", "journal", "pages"} <= set(props)
+    assert "$ref" not in r.text          # inlined: no resolution needed
+    # The route the schema advertises must exist on this very app.
+    assert any(getattr(route, "path", None) == "/api/verify_batch" for route in main.app.routes)
+
+
+def test_edugenai_schema_request_shape_is_accepted(monkeypatch):
+    """Contract: a request built exactly as the schema documents must work."""
+    from fastapi.testclient import TestClient
+    from app import main, toolspec
+
+    monkeypatch.setattr(main, "_run_batch",
+                        lambda items, key: [{"index": i, "status": "found"} for i, _ in items])
+    client = TestClient(main.app)
+    reference = {name: {"title": "T", "authors": ["A, B"], "et_al": False, "year": 2020,
+                        "doi": "10.1/x", "journal": "J", "volume": "1", "issue": "2",
+                        "pages": "1-2"}[name] for name in toolspec.REFERENCE_PROPERTIES}
+    r = client.post("/api/verify_batch", json={"references": [reference]})
+    assert r.status_code == 200 and r.json()["count"] == 1
+
+
+def test_edugenai_page_documents_the_new_flow():
+    from fastapi.testclient import TestClient
+    from app import main
+    html = TestClient(main.app).get("/edugenai").text
+    assert f"{main.SITE_URL}/openapi/edugenai.json" in html
+    assert "Agent Builder" in html and "Add Action" in html
+    assert "Temporarily offline" not in html and "Extension builder</strong>" not in html
+    assert "verify_references" in html

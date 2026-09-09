@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Generate app/static/edugenai-instructions.pdf.
 
+A printable copy of /edugenai — the page is the authoritative version.
+
 Build-time only (reportlab is not a runtime dependency of the app). Re-run this
 after editing the EduGenAI instructions to refresh the committed PDF:
 
@@ -8,6 +10,7 @@ after editing the EduGenAI instructions to refresh the committed PDF:
     python scripts/build_edugenai_pdf.py
 """
 
+import textwrap
 from pathlib import Path
 
 from reportlab.lib.colors import HexColor
@@ -48,434 +51,159 @@ NOTE = ParagraphStyle("NOTE", parent=BODY, backColor=HexColor("#fbf7ec"),
                       borderColor=CODE_BORDER, borderWidth=0.5, borderPadding=7,
                       leftIndent=2, spaceBefore=4, spaceAfter=8)
 
-HOST = "https://YOUR-DEPLOYMENT-HOST"
+HOST = "https://www.phantocite.com"
+SCHEMA_URL = f"{HOST}/openapi/edugenai.json"
 
-DETAIL = """Use this extension to fact-check the reference list of an uploaded paper.
-(Emoji are written as words below; copy the exact version with emoji from the
-/edugenai page.)
+# Pasted verbatim into the agent's Instructions field. Kept identical to the
+# block on /edugenai (id="c-detail") — that page is the authoritative copy.
+INSTRUCTIONS = """You check the reference list of a paper the user uploads. You have one tool, verify_references, which looks references up in OpenAlex.
 
-TRIGGER - WHEN TO RUN. Run all four steps below end to end, WITHOUT asking any
-clarifying question first, whenever the user gives ANY go-ahead while a document
-is present in the conversation. Triggers include (not exhaustive): "start",
-"go", "run", "check", "verify", "start the check", "start the extension", "run
-the extension", "start the references extension", "start the reference
-verification", "check my citations", "verify my references", any message
-containing "start" or "run" together with "check", "extension" or "references",
-or a paper uploaded with no other instruction. Never respond to a trigger with a
-greeting, a menu of options, or a request to paste the bibliography - the
-document already in the conversation IS the input. Only if NO document has been
-provided at all, ask for one, then run.
-The steps run IN ORDER: you must finish STEP 1 (reading the document and
-extracting the references yourself) BEFORE calling the function in STEP 2.
-Never call verify_references with an empty, placeholder, or not-yet-extracted
-references array.
+WHEN TO RUN. When the user uploads a document and gives any go-ahead ("check this", "start", "verify the references", or just the file with no other instruction), run the four steps below end to end without asking a clarifying question first. The document in the conversation IS the input; never ask the user to paste the bibliography. Only if no document has been provided at all, ask for one, then run.
 
-AUDIENCE. The user is a marker / examiner / supervisor checking SOMEONE ELSE'S
-paper (typically a student's). Never address the user as the paper's author:
-write "the paper" or "the student's paper", never "your paper" / "you cite".
-Report findings as facts for a reviewer. Never give feedback or improvement
-advice to the writer.
+STEP 1 - EXTRACT (do this yourself, before calling the tool). Read the document. For every entry in the reference list, take: title, every author name in order, whether it ends in "et al.", year, DOI (only if printed), journal or venue, volume, issue, and pages. Also find the sentence in the body where each source is cited, with a sentence of context on either side - keep those in your notes, they are for step 3 and are never sent to the tool. Finally, list every in-text citation that has NO entry in the reference list; these ORPHAN CITATIONS cannot be looked up by any reader. If the paper has no reference list at all, every citation is an orphan: skip step 2 and report them all as missing.
 
-OUTPUT DISCIPLINE. Produce ONLY the output defined in Step 4 - the table, the
-Details section, the Missing-references section when relevant, and the one-line
-summary. NOTHING else: no APA or formatting critique, no style fixes, no
-suggested extra literature, no praise, no summary of what the paper is about,
-no advice - unless the user explicitly asks for such things in a later message.
-EXCEPTION - these are citation ERRORS, not style, and MUST be reported: wrong
-author names, wrong AUTHOR ORDER (e.g. the text or reference says "Kahneman &
-Tversky, 1974" where the record is Tversky & Kahneman), wrong
-year/journal/DOI/pages, in-text citations that contradict their reference
-entry, and citations missing from the reference list. Punctuation,
-capitalisation, and italics are style - stay silent on those.
-If the function call fails or returns an empty result, say exactly that in one
-or two sentences ("the verification service returned no data, so the references
-could not be checked - try again") and STOP: do not substitute an APA review, a
-plausibility opinion, or any other unrequested analysis.
+STEP 2 - VERIFY. Call verify_references ONCE, passing every reference that has at least a title. Never call it with an empty or placeholder list. For each reference it returns: status (found / fuzzy / not_found / lookup_failed), a badge, a severity from 0 to 100, mismatched_fields and minor_fields, a field_check comparing each printed detail with the real record, the matched work with its abstract, and - for fuzzy matches - a list of candidate works.
 
-STEP 1 - EXTRACT. Read the document. For every entry in the reference list, pull
-out: title, the full list of author names in order, whether it ends in "et al.",
-year, DOI (only if printed), journal/venue, volume, issue, and page range. Also
-find the sentence(s) in the body where each source is cited, with one sentence of
-context on each side. Keep those citation sentences in your own working notes for
-Step 3 - do NOT send them to the function.
-Also list every IN-TEXT citation (e.g. "(Smith, 2020)", "Jones et al. (2019)")
-that has NO matching entry in the reference list - these ORPHAN CITATIONS cannot
-be looked up by any reader. Keep them in your notes for Step 4; do not send them
-to the function. If the paper has NO reference list at all, every in-text
-citation is an orphan: do not fabricate entries and do not send author+year-only
-items - skip the function call and go straight to Step 4, reporting every
-citation as missing its reference.
+STEP 3 - JUDGE THE USE. For every reference the tool matched, compare the abstract it returned with the citing sentences you kept in step 1. Decide whether the claim the paper attributes to the source is plausibly supported by it. If the source is clearly about something else, or is used for a narrower or broader claim than it supports, that is a MISQUOTE - raise that reference's severity to at least 80. Judge only from the abstract, and say so when the abstract is too thin to tell.
 
-STEP 2 - VERIFY. Call the "verify_references" function once, passing every
-reference that has at least a title or a DOI (an entry with neither cannot be
-identified and comes back as lookup_failed - report it as unverifiable, never as
-a hallucination). If the function's only parameter is "references_json" (a
-string), serialize the reference array to a JSON string and pass it as that
-parameter. For each it returns: "badge" and "severity" (0-100), "status" (found /
-fuzzy / not_found / lookup_failed), "mismatched_fields" and "minor_fields", a
-"field_check" comparing each printed detail to OpenAlex (reference_value vs
-openalex_value; each field's status is "match", "close" = a minor naming
-variation such as an abbreviated journal name, or "mismatch"), the matched
-"work" (authors, year, venue, doi, url) and its "abstract", and - for FUZZY
-matches only, where "work" is null and "field_check" is empty - a "candidates"
-array of the closest works (each with title, authors, year, venue, doi, url).
+STEP 4 - REPORT. Never show the user the raw JSON; it is a machine interface. Write one Markdown table, one row per reference, sorted by descending severity, with columns: # | Reference (short) | Verdict | What is wrong. Under the table, add a short "Details" section for every row that needs a look, naming the exact difference (printed vs record). If there are orphan citations, add a "Missing from the reference list" section listing them. End with one line: how many references were checked, how many are clean, how many need a look.
 
-STEP 3 - JUDGE MISQUOTES (THE CORE OF THIS TOOL - NEVER SKIP). This comparison is
-the main reason the user runs the check. For EVERY reference whose status is
-"found" and whose returned "abstract" is non-empty, you MUST compare the citation
-sentence(s) you kept in Step 1 against that abstract and produce a real verdict:
-if the paper uses the source as though it were about a different topic than the
-abstract shows, that is a MISQUOTE; otherwise it is consistent. Writing "-" in
-the Misquote column for a found row that has an abstract is an ERROR. Only when
-there is no abstract, or the reference is never cited in the body, is the
-verdict "unclear". Never invent a verdict.
+REPORT ONLY THIS. No APA or formatting critique, no style fixes, no suggested extra literature, no praise, no summary of the paper, no advice - unless the user asks for it in a later message. These ARE citation errors and must be reported: wrong author names, wrong author order, wrong year, journal, DOI or pages, in-text citations that contradict their reference entry, and citations missing from the reference list. Punctuation, capitalisation and italics are style - stay silent on those.
 
-STEP 4 - PRESENT (follow this format exactly). The user must NEVER see the raw
-JSON from the function - it is a machine interface. Convert it into ONE readable
-Markdown table, one row per reference, sorted by DESCENDING severity. Use the "severity" value; if you
-judge a reference to be a misquote MISMATCH, raise its severity to AT LEAST 80
-(keep the function's number if it is already higher). Columns:
+NEVER invent a DOI, an author, a year or a verdict the tool did not return. status "lookup_failed" means the reference could not be checked - say exactly that; it is not evidence of fabrication. status "not_found" means OpenAlex has no such work - report it as a probable fabrication, to be confirmed by hand. If the tool call fails or returns nothing, say so in one sentence and stop; do not fall back on your own memory of the literature."""
 
-  | # | Flag | Reference (as printed) | Status | Metadata issues | Misquote |
-    What the paper is about |
-
-- Flag: blue if status is lookup_failed (could not be checked); otherwise red if
-  severity >= 70, amber if 45-69, green otherwise.
-- Status: the "badge" value with a coloured dot - red Potential hallucination
-  (not_found), amber Fuzzy match (fuzzy), blue Lookup failed (no result to
-  compare), green Verified (found).
-- Metadata issues: if "mismatched_fields" is empty, write "-". Otherwise, for each
-  mismatched field take reference_value and openalex_value from "field_check" and
-  write:  field: "printed" -> "OpenAlex".  Bold **authors** when it is one of them.
-  (A fuzzy row has no field_check yet - write "-".) Fields with status "close"
-  ("minor_fields") are NOT errors - leave them out of this column, or mention
-  them only as "minor naming variant" without a flag.
-- Misquote: Mismatch (red) / Likely mismatch (amber) / Consistent (green) /
-  Unclear (dash), plus a 6-10 word reason. (Only "found" rows have a misquote.)
-- What the paper is about: one short clause from the "work" abstract, or "-".
-
-After the table, add a "Details" section for the red and amber rows only.
-- FOUND row: the matched title as a link to "work.url", the field-by-field
-  comparison, and one sentence on the misquote if any.
-- FUZZY row: "work" is null - instead list "candidates" (each title as a link to
-  its "url", with authors and year) and ask the user to confirm which, if any, is
-  the intended source. Do NOT present a fuzzy row as verified.
-
-Then, if Step 1 found orphan citations, add a "Missing references" section: one
-line per orphan - the citation as printed, the sentence where it appears, and
-the note that it has no entry in the reference list so it cannot be verified.
-This is a real problem for the reader and must never be silently omitted.
-
-End with one summary line that does NOT hide problems inside "verified":
-"N references - X verified & consistent, Y need review, Z fuzzy, W potential
-hallucinations, V in-text citations missing from the reference list." (Drop the
-last part when there are no orphans.) A reference that EXISTS but has a metadata
-mismatch or a misquote counts under "need review", never under "verified"
-(optionally break Y down, e.g. "2 with wrong details, 1 cited out of context").
-
-Never invent a DOI, author, year, or verdict the function did not return. If
-"status" is "lookup_failed", say the reference could not be checked - do NOT call
-it a hallucination."""
-
-SCHEMA = """{
-  "name": "verify_references",
-  "description": "Verify a list of bibliographic references against OpenAlex.
-    Call this whenever the user says 'start', 'start the extension', 'start
-    the check', or wants to check, verify, or fact-check the citations or
-    references in a paper. For each reference, returns whether the work exists
-    (found / fuzzy / not_found), a field-by-field comparison of the printed
-    metadata (title, authors, year, journal, DOI, volume, issue, pages) against
-    the real record, and the abstract of the matched work.",
-  "parameters": {
-    "type": "object",
-    "properties": {
-      "references": {
-        "type": "array",
-        "description": "Every reference in the paper's bibliography.",
-        "items": {
-          "type": "object",
-          "properties": {
-            "title":   { "type": "string" },
-            "authors": { "type": "array", "items": { "type": "string" },
-                         "description": "Every author name printed, in order." },
-            "et_al":   { "type": "boolean" },
-            "year":    { "type": "integer" },
-            "doi":     { "type": "string" },
-            "journal": { "type": "string" },
-            "volume":  { "type": "string" },
-            "issue":   { "type": "string" },
-            "pages":   { "type": "string" }
-          },
-          "required": ["title"]
-        }
-      }
-    },
-    "required": ["references"]
-  }
-}"""
-
-REQ = """{
-  "references": [
-    {
-      "title": "Highly accurate protein structure prediction with AlphaFold",
-      "authors": ["Smith, J.", "Jones, B."],
-      "et_al": false,
-      "year": 2019,
-      "journal": "Science",
-      "pages": "100-110"
-    }
-  ]
-}"""
-
-RESP = """{
-  "count": 1,
-  "results": [{
-    "index": 1,
-    "status": "found",
-    "badge": "Verified",
-    "severity": 85,
-    "priority": "Review",
-    "mismatched_fields": ["authors", "year", "journal"],
-    "minor_fields": [],
-    "work": {
-      "title": "Highly accurate protein structure prediction with AlphaFold",
-      "authors": ["John Jumper", "Richard Evans", "..."],
-      "year": 2021, "venue": "Nature",
-      "doi": "10.1038/s41586-021-03819-2",
-      "abstract": "Proteins are essential to life ... (used for the misquote check)"
-    },
-    "field_mismatch_count": 3,
-    "field_check": [
-      { "field": "title",   "status": "match" },
-      { "field": "authors", "status": "mismatch",
-        "reference_value": "Smith, J., Jones, B.",
-        "openalex_value": "John Jumper, Richard Evans, ..." },
-      { "field": "year",    "status": "mismatch",
-        "reference_value": 2019, "openalex_value": 2021 },
-      { "field": "journal", "status": "mismatch",
-        "reference_value": "Science", "openalex_value": "Nature" }
-    ]
-  }]
-}"""
+CURL = ("curl -s -X POST " + HOST + "/api/verify_batch \\\n"
+        '  -H "Content-Type: application/json" \\\n'
+        '  -d \'{"references":[{"title":"Attention is all you need","year":2017}]}\'')
 
 
-def code(text):
-    return Preformatted(text, CODE)
+def code(text, width=96):
+    """Preformatted does not wrap, so hard-wrap long prose to the page width."""
+    lines = []
+    for line in text.splitlines():
+        lines.extend(textwrap.wrap(line, width) or [""])
+    return Preformatted("\n".join(lines), CODE)
+
+
+def bullets(*items):
+    return ListFlowable([ListItem(Paragraph(t, BODY)) for t in items],
+                        bulletType="bullet", start="disc")
 
 
 def build():
     story = []
-    story.append(Paragraph("Use the Citation Checker in EduGenAI", H1))
+    story.append(Paragraph("Use Phantocite in eduGenAI 2", H1))
     story.append(Paragraph(
-        "Register this tool as an EduGenAI Extension so the assistant can verify a "
-        "paper's references against OpenAlex — inside your own EduGenAI chat, "
-        "with no separate LLM key.", SUB))
+        "Give an eduGenAI 2 agent an Action that verifies a paper's references against "
+        "OpenAlex — inside your own chat, with no API key of your own.", SUB))
+    story.append(Paragraph(
+        "eduGenAI 1 was withdrawn after vulnerabilities were found in an audit, and its "
+        "Extension builder went with it. eduGenAI 2 (edugenai2.npuls.nl, sign in with SRAM) "
+        "is built on LibreChat, where an assistant gains a tool from an OpenAPI schema "
+        "instead of a hand-written function definition. These steps are for that.", NOTE))
 
     story.append(Paragraph("How it works", H2))
+    story.append(bullets(
+        "<b>The agent</b> reads the paper, extracts the reference list and the sentences "
+        "that cite each source, judges whether each citation matches the source, and "
+        "writes the report.",
+        "<b>This action's endpoint</b> looks each reference up in OpenAlex and checks "
+        "title, authors, year, journal, DOI, volume, issue and pages — deterministically, "
+        "with no LLM — and returns the abstract.",
+    ))
     story.append(Paragraph(
-        "An EduGenAI Extension is a function-calling tool: you give EduGenAI an HTTP "
-        "endpoint and a function definition, and its assistant calls that endpoint "
-        "as a JSON request whenever it needs to. The work splits across two sides:", BODY))
-    story.append(ListFlowable([
-        ListItem(Paragraph("<b>EduGenAI's assistant</b> reads the paper and extracts the "
-                           "reference list plus the sentences that cite each source.", BODY)),
-        ListItem(Paragraph("<b>This extension endpoint</b> looks each reference up in "
-                           "OpenAlex and checks title, authors, year, journal, DOI, volume, "
-                           "issue and pages — deterministically, with no LLM — and "
-                           "returns the abstract.", BODY)),
-        ListItem(Paragraph("<b>EduGenAI's assistant</b> compares the citing sentence to that "
-                           "abstract and flags misquotes.", BODY)),
-    ], bulletType="bullet", start="disc"))
-    story.append(Paragraph(
-        "Because the reasoning stays on EduGenAI's side, the extension needs no LLM API "
-        "key. It only wraps OpenAlex, which is free. An optional OpenAlex Premium key can "
-        "be stored securely in the Headers / Azure Key Vault section (Step 3).", NOTE))
+        "Because the reasoning stays on eduGenAI's side, the action needs no LLM API key. "
+        "It only wraps OpenAlex, which is free.", NOTE))
 
     story.append(Paragraph("Before you start", H2))
-    story.append(Paragraph(
-        "Deploy this app at a public HTTPS URL — EduGenAI calls it server-to-server. "
-        f"Everywhere below, replace <font face='Courier'>{HOST}</font> with your "
-        "deployment's address.", BODY))
+    story.append(bullets(
+        "An eduGenAI 2 account (edugenai2.npuls.nl, SRAM / SURFconext).",
+        "Agents with Actions enabled for your institution. Both are administrator "
+        "settings in LibreChat, and reachable domains can be restricted to a whitelist. "
+        "If the Agent Builder is missing or an action will not save, ask your "
+        "institution's contact or edugenai@npuls.nl to enable agent actions and to allow "
+        "www.phantocite.com.",
+        "A model that supports tool calling — the GPT models on the platform do.",
+    ))
 
-    story.append(Paragraph("Step 1 — Open the Extension builder", H2))
-    story.append(Paragraph("In EduGenAI, create a new Extension (Name, Short description, "
-                           "Headers, Functions).", BODY))
-
-    story.append(Paragraph("Step 2 — Name and describe it", H2))
+    story.append(Paragraph("Step 1 — Create the agent", H2))
+    story.append(Paragraph("Open the Agent Builder in the sidebar, create an agent, give it "
+                           "a name and pick a model.", BODY))
     story.append(Paragraph("Name", LABEL))
-    story.append(code("OpenAlex Citation Verifier"))
-    story.append(Paragraph("Short description", LABEL))
-    story.append(code("Verifies a paper's references against OpenAlex: checks that each\n"
-                       "work exists and that the printed title, authors, year, journal,\n"
-                       "DOI and pages match, and returns the abstract. Run it whenever\n"
-                       "the user says \"start\", \"start the extension\", \"check\", or asks\n"
-                       "to verify citations or references."))
-    story.append(Paragraph("Detail description (paste verbatim — this is the assistant's "
-                           "instruction)", LABEL))
-    story.append(code(DETAIL))
+    story.append(code("Citation checker (OpenAlex)"))
+
+    story.append(Paragraph("Step 2 — Paste the instructions", H2))
+    story.append(Paragraph("Into the agent's Instructions field, verbatim. This is the whole "
+                           "workflow: what to extract, when to call the tool, how to report.", BODY))
+    story.append(code(INSTRUCTIONS))
 
     story.append(PageBreak())
-    story.append(Paragraph("Step 3 — Add the Header", H2))
-    story.append(Paragraph("In the Headers section add: <b>Key</b> "
-                           "<font face='Courier'>Content-Type</font> &nbsp; <b>Value</b> "
-                           "<font face='Courier'>application/json</font>.", BODY))
-    story.append(Paragraph("Optional — OpenAlex Premium: add a second header "
-                           "<font face='Courier'>X-OpenAlex-Key</font> with your key as the "
-                           "value, using the Secure header values option so it is stored in "
-                           "Azure Key Vault.", BODY))
-
-    story.append(Paragraph("Step 4 — Add the function", H2))
-    story.append(Paragraph("Method &amp; URL", LABEL))
-    story.append(code(f"POST  {HOST}/api/verify_batch"))
-    story.append(Paragraph("If POST sends an empty body on your platform (see "
-                           "Troubleshooting), use GET with the same URL instead — the "
-                           "endpoint accepts the arguments in the query string too.", BODY))
-    story.append(Paragraph("Function definition", LABEL))
-    story.append(code(SCHEMA))
-    story.append(Paragraph("Plan B — if the arguments never arrive (the Troubleshooting hint "
-                           "shows an empty body AND an empty query string on both POST and "
-                           "GET): the platform's gateway cannot serialize the nested "
-                           "'references' array. Replace the function definition with a flat "
-                           "single-string version — one required string parameter named "
-                           "references_json, described as \"The paper's references as a JSON "
-                           "string: [{\\\"title\\\":...,\\\"authors\\\":[...],...}]\". The "
-                           "assistant then passes the same array serialized as a JSON string, "
-                           "which any gateway can transmit and the endpoint accepts natively. "
-                           "The exact copy-paste block is on the /edugenai page.", BODY))
-
-    story.append(Paragraph("Step 5 — Submit and test", H2))
-    story.append(Paragraph("Click Submit. In a chat, upload a paper and type “start” (or "
-                           "“start the extension”, “check my citations”, …) — the Detail "
-                           "description tells the assistant to treat any such go-ahead as the "
-                           "run signal and call your endpoint without asking questions first. "
-                           "If a short trigger gets a menu instead of a run, use the most "
-                           "dependable, explicit prompt: “Use the execution steps in the "
-                           "verify_references extension in order to check the references in "
-                           "the attached pdf.”", BODY))
-    story.append(Paragraph("Installed this extension before? The saved copy does not update "
-                           "itself: if “start the extension” gets you a menu instead of a run, "
-                           "re-paste the current Detail description from Step 2 into your "
-                           "extension and submit again.", BODY))
-    story.append(Paragraph("Troubleshooting — count: 0", H2))
-    story.append(Paragraph("Every response carries an api_version field, and a response with "
-                           "zero results carries a hint field describing what the server "
-                           "received (key names only, never content). Ask the assistant to "
-                           "show the raw output: no api_version means the extension calls an "
-                           "OLD deployment — fix the function URL (preview/branch URLs keep "
-                           "serving stale builds). A hint saying the body was EMPTY "
-                           "(Content-Length: 0) means the platform never put the function "
-                           "arguments into the POST body — change the function's Method from "
-                           "POST to GET (arguments then travel in the query string, which the "
-                           "endpoint accepts), or fill in the builder's request-body/template "
-                           "field if it has one. Empty on BOTH POST and GET (body empty and no "
-                           "query keys): the gateway cannot serialize the nested references "
-                           "array — switch to the Plan B single-string function definition "
-                           "(references_json). Any other hint describes the shape that "
-                           "arrived — send it to the maintainer. You can test the endpoint from "
-                           "a terminal: curl -s -X POST <host>/api/verify_batch -H "
-                           "\"Content-Type: application/json\" -d '{\"references\":[{\"title\":"
-                           "\"Attention is all you need\",\"year\":2017}]}' — a healthy "
-                           "deployment answers within seconds with count: 1 and a Verified "
-                           "result.", BODY))
-    story.append(Paragraph("The definitive transport test: add a second, minimal function "
-                           "named echo_test pointing at POST <host>/api/echo with one required "
-                           "string parameter \"message\", then say in a chat: 'Run the echo "
-                           "test with the message PHANTOCITE-TRANSPORT-TEST-42 and show me the "
-                           "raw response.' The /api/echo endpoint is a byte-level mirror (no "
-                           "parsing at all): if the test string appears in its response, the "
-                           "platform CAN transmit arguments and the problem is the verify "
-                           "function's configuration; if the mirrored body and query are "
-                           "empty, the platform provably sends nothing — take that output to "
-                           "the platform's support. Repeat once with Method GET.", BODY))
-
-    story.append(PageBreak())
-    story.append(Paragraph("What the endpoint returns", H2))
-    story.append(Paragraph("Request EduGenAI sends to /api/verify_batch:", LABEL))
-    story.append(code(REQ))
-    story.append(Paragraph("Response (abbreviated) — wrong authors, year and journal are "
-                           "caught, and the abstract is returned for the misquote step:", LABEL))
-    story.append(code(RESP))
-    story.append(Paragraph("A single-reference endpoint is also available at "
-                           "<font face='Courier'>POST /api/verify</font> (same fields, no outer "
-                           "“references” array). Prefer the batch endpoint for a whole "
-                           "bibliography — one round trip, kinder to OpenAlex rate limits.", NOTE))
-
-    story.append(Paragraph("From JSON to a readable table — what you'll see in chat", H2))
+    story.append(Paragraph("Step 3 — Add the Action", H2))
+    story.append(Paragraph("Click Add Action. LibreChat builds the tool from an OpenAPI "
+                           "schema, and this app publishes one:", BODY))
+    story.append(code(SCHEMA_URL))
     story.append(Paragraph(
-        "You never look at that JSON — it is the machine interface between EduGenAI and "
-        "the endpoint. The Detail description from Step 2 instructs the assistant to "
-        "convert it (STEP 4) into a severity-sorted table with flags, scores, and the "
-        "mismatches spelled out, mirroring how the website presents results. A typical "
-        "chat answer looks like:", BODY))
-    story.append(code(
-        "| # | Flag | Reference (as printed)      | Status              | Metadata issues"
-        "                | Misquote            | What the paper is about |\n"
-        "|---|------|-----------------------------|---------------------|----------------"
-        "----------------|---------------------|-------------------------|\n"
-        "| 3 | RED  | Zorblatt, Q. (2021). Quantum blockchain effects on medieval cheese "
-        "trading... | Potential hallucination | -  | -  | -  |\n"
-        "| 2 | RED  | Smith, J. & Jones, B. (2019). Highly accurate protein structure "
-        "prediction... | Verified | authors: \"Smith, Jones\" -> \"Jumper, Evans...\"; "
-        "year: 2019 -> 2021; journal: Science -> Nature | Mismatch - cited for labour "
-        "productivity; paper is protein-structure AI | Deep-learning protein structure "
-        "prediction |\n"
-        "| 1 | GREEN | Vaswani, A. et al. (2017). Attention is all you need. NeurIPS. | "
-        "Verified | - | Consistent | Attention-only sequence model (Transformer) |"))
+        "Paste that URL into the schema box (or open it and paste the JSON itself, if your "
+        "build has no import-from-URL field). Set Authentication to None — the endpoint "
+        "needs no key. Save the action, then save the agent.", BODY))
     story.append(Paragraph(
-        "...followed by a Details section for the flagged rows and a one-line summary "
-        "count. If you still see raw JSON in the chat, the Detail description probably "
-        "wasn't saved with the extension (re-check Step 2) or was truncated — re-paste it, "
-        "or as a per-chat override end your request with: “Present the results as a "
-        "severity-sorted table with flags and the metadata mismatches spelled out; do not "
-        "show raw JSON.” The endpoint's JSON ships ready-made display fields (badge, "
-        "severity, priority, mismatched_fields) precisely so the assistant only has to "
-        "lay them out, not compute them.", NOTE))
+        "The schema declares one operation, verify_references, and one server, "
+        f"<font face='Courier'>{HOST}</font>. LibreChat checks that an action's domain "
+        "matches that server URL, so leave it as published unless you are self-hosting — "
+        "in which case use your own deployment's /openapi/edugenai.json.", NOTE))
+    story.append(Paragraph(
+        "Optional — OpenAlex Premium: for higher OpenAlex rate limits, set the action's "
+        "authentication to an API key sent as the custom header X-OpenAlex-Key. It is used "
+        "per request and never stored. The tool works fine without one.", BODY))
 
-    story.append(Paragraph("What data passes through your server?", H2))
-    story.append(Paragraph("Because the extension calls your deployment, here is "
-                           "exactly what travels there — and what does not:", BODY))
-    story.append(ListFlowable([
-        ListItem(Paragraph("<b>The paper's full text, the student's name, and the citing "
-                           "sentences stay inside EduGenAI.</b> The assistant keeps the "
-                           "citing sentences for its own misquote reasoning; they are never "
-                           "sent to your endpoint.", BODY)),
-        ListItem(Paragraph("Only reference <b>metadata</b> — title, authors, year, DOI, "
-                           "journal, volume, issue, pages — reaches your endpoint, and "
-                           "(titles/DOIs) go on to OpenAlex for the lookup.", BODY)),
-        ListItem(Paragraph("No LLM key is involved server-side; the reasoning runs on "
-                           "EduGenAI's model.", BODY)),
-    ], bulletType="bullet", start="disc"))
-    story.append(Paragraph(
-        "So: only bibliographic metadata goes through your server, and only in transit. "
-        "The function call is the only thing that reaches it. This app is stateless — no "
-        "database, no file writes — and never logs request bodies or keys. Whatever "
-        "hosting stack or reverse proxy you deploy behind may keep its own access log "
-        "(method + path + status, not bodies); that part is under your control.", NOTE))
-    story.append(Paragraph(
-        "Caveat about the OpenAlex Premium key: it is used per-request, never stored, and "
-        "scrubbed from any error message this app returns. But when your endpoint calls "
-        "OpenAlex the key rides as a query parameter on the outbound URL, so an egress "
-        "proxy that logs full outbound URLs could capture it. If that matters, omit the "
-        "Premium key (the tool works without one) or use a proxy that redacts query "
-        "strings.", NOTE))
+    story.append(Paragraph("Step 4 — Test it", H2))
+    story.append(Paragraph("Start a chat with the agent, attach a paper, and ask:", BODY))
+    story.append(code("Check the references in the attached paper."))
+    story.append(Paragraph("The agent should extract the references itself, call "
+                           "verify_references once, and answer with a table. LibreChat shows "
+                           "the tool call in the message, so you can confirm it ran.", BODY))
 
-    story.append(Paragraph("Notes &amp; limits", H2))
-    story.append(ListFlowable([
-        ListItem(Paragraph("No LLM key is stored or used by the extension; OpenAlex is free "
-                           "and needs no key.", BODY)),
-        ListItem(Paragraph("OpenAlex's canonical year can differ from a printed year "
-                           "(online-first vs issue year) — treat a lone year mismatch as a "
-                           "prompt to double-check, not a verdict.", BODY)),
-        ListItem(Paragraph("The misquote judgement uses the abstract only, so a claim "
-                           "supported by the full text but not the abstract may read as "
-                           "uncertain. Treat results as leads for a human reviewer.", BODY)),
-        ListItem(Paragraph("Batch requests are capped at 200 references.", BODY)),
-    ], bulletType="bullet", start="disc"))
+    story.append(Paragraph("Troubleshooting", H2))
+    story.append(bullets(
+        "<b>No Agent Builder, or Add Action missing or refusing to save.</b> An "
+        "administrator setting — see Before you start. Nothing on this side works around it.",
+        "<b>Invalid schema or domain mismatch.</b> LibreChat checks the action's domain "
+        "against the servers URL in the schema; import the published URL unchanged.",
+        "<b>The agent never calls the tool.</b> Either the model has no tool support "
+        "(switch to a GPT model) or the instructions were not saved. Naming the tool in the "
+        "prompt forces it: \u201cUse the verify_references tool to check the references in the "
+        "attached paper.\u201d",
+        "<b>Raw JSON in the chat.</b> The instructions were truncated or not saved; re-paste "
+        "Step 2.",
+        "<b>count: 0.</b> Every response carries api_version, and one with no results carries "
+        "a hint describing what arrived (key names only, never content). No api_version at "
+        "all means the action points at an old deployment.",
+        "<b>lookup_failed.</b> A failed lookup, not a fabrication — usually a reference with "
+        "no usable title.",
+    ))
+    story.append(Paragraph("To check the endpoint independently of eduGenAI, run this from "
+                           "any terminal — a healthy deployment answers in a couple of "
+                           "seconds with count: 1 and a Verified result:", BODY))
+    story.append(code(CURL))
+
+    story.append(Paragraph("Notes & limits", H2))
+    story.append(bullets(
+        "No LLM key is stored or used by the action; OpenAlex is free and needs no key. "
+        "The agent's own model runs on eduGenAI's side, under its terms.",
+        "Only bibliographic metadata reaches this endpoint. The paper's full text and the "
+        "citing sentences stay inside eduGenAI.",
+        "OpenAlex's canonical year can differ from a printed year (online-first vs issue "
+        "year) — treat a lone year mismatch as a prompt to double-check, not a verdict.",
+        "The misquote judgement uses the abstract only, so a claim supported by the full "
+        "text but not the abstract may read as uncertain. Treat results as leads for a "
+        "human reviewer.",
+        "Batch requests are capped at 200 references.",
+    ))
 
     doc = SimpleDocTemplate(str(OUT), pagesize=A4,
                             leftMargin=2 * cm, rightMargin=2 * cm,
                             topMargin=1.8 * cm, bottomMargin=1.8 * cm,
-                            title="Use the Citation Checker in EduGenAI")
+                            title="Use Phantocite in eduGenAI 2")
     doc.build(story)
     print("wrote", OUT)
 
