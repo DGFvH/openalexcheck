@@ -58,6 +58,9 @@ app.add_middleware(
 )
 
 STATIC_DIR = Path(__file__).parent / "static"
+# Canonical origin, used for the absolute URLs in the link-preview tags (Open
+# Graph needs absolute; a relative one is ignored by LinkedIn, Slack and X).
+SITE_URL = os.environ.get("SITE_URL", "https://www.phantocite.com").rstrip("/")
 ABSTRACT_CAP = 3000  # trim abstracts in API responses to keep payloads small
 
 # Output-token cap per LLM call. Fixed server-side and sized to the analysis
@@ -119,6 +122,7 @@ def _page(name: str) -> HTMLResponse:
     html = ((STATIC_DIR / name).read_text(encoding="utf-8")
             .replace("<script", f'<script nonce="{nonce}"')
             .replace("{{LLM_PROVIDER}}", provider)
+            .replace("{{SITE_URL}}", SITE_URL)
             .replace("{{CAP_PAGES}}", str(CAPACITY_NOTE_PAGES))
             .replace("{{CAP_REFS}}", str(CAPACITY_NOTE_REFS)))
     csp = ("default-src 'self'; "
@@ -740,7 +744,7 @@ def _run_batch(items: list, key: Optional[str]) -> list[dict]:
 # indistinguishable from a parsing failure on the current one.
 # Deployment marker, returned by the verify endpoints (and /api/echo). BUMP on
 # every deploy so "is production current?" stays answerable from a response.
-API_VERSION = "2026-09-03.18"
+API_VERSION = "2026-09-03.19"
 
 
 def _from_query(request: Request) -> tuple[list, Optional[str]]:

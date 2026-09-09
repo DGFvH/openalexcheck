@@ -1400,3 +1400,23 @@ def test_report_font_draws_european_names():
     assert "α" not in report._portable("α")          # no glyph → never a black box
     assert report._portable("Erdős") in ("Erdős", "Erdos")
     assert report.FONT in report.build_pdf([{"#": 1}]).decode("latin-1")
+
+
+# Link previews (LinkedIn, Slack, X) need absolute URLs — a relative og:image
+# is ignored — so the pages carry {{SITE_URL}} and _page() fills it in.
+def test_link_preview_metadata_is_absolute():
+    from fastapi.testclient import TestClient
+    from app import main
+    client = TestClient(main.app)
+    for path, expected_url in (("/", f"{main.SITE_URL}/"), ("/edugenai", f"{main.SITE_URL}/edugenai")):
+        html = client.get(path).text
+        assert "{{" not in html                      # every token substituted
+        assert f'<meta property="og:url" content="{expected_url}">' in html
+        assert f'<meta property="og:image" content="{main.SITE_URL}/static/og-image.png">' in html
+        assert f'<link rel="canonical" href="{expected_url}">' in html
+        assert '<meta name="twitter:card" content="summary_large_image">' in html
+        assert '<meta name="description" content="' in html
+        assert 'og:image:width" content="1200"' in html and 'og:image:height" content="630"' in html
+    r = client.get("/static/og-image.png")
+    assert r.status_code == 200 and r.headers["content-type"] == "image/png"
+    assert r.content.startswith(b"\x89PNG")
