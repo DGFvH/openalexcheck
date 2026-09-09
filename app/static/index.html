@@ -196,6 +196,7 @@
         <button class="btn ghost small" data-fmt="html">HTML</button>
       </div>
     </div>
+    <div id="banners"></div>
     <div id="orphans"></div>
     <div id="screen-results"></div>
     <div id="screen-fuzzy" class="hidden"></div>
@@ -427,7 +428,7 @@ function showSample() {
   const banner = document.createElement("div");
   banner.className = "panel tone-info banner sample-banner";
   banner.innerHTML = "<strong>Sample output</strong> — an illustrative example using five real papers (three cited with errors, two clean). This is a static demo: no document or API key was used.";
-  $("screen-results").prepend(banner);
+  $("banners").append(banner);
   $("results-area").scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
@@ -455,6 +456,7 @@ async function runAnalysis() {
   $("screen-results").innerHTML = "";
   $("screen-fuzzy").innerHTML = "";
   $("orphans").innerHTML = "";           // never show a previous paper's data
+  $("banners").innerHTML = "";
   $("summary").innerHTML = "";
   $("fuzzy-count").textContent = "";
   $("downloads").style.display = "none";
@@ -692,6 +694,7 @@ function finalize(opts) {
   PARTIAL = !!opts.partial;
   $("progress-status").textContent = PARTIAL ? "Stopped — partial results." : "Done.";
   if (!PARTIAL) $("progress-bar").style.width = "100%";
+  $("banners").innerHTML = "";   // a previous run's banner must never linger
   // Re-render the results screen sorted by severity (worst problems first),
   // now that every reference — with field checks and misquote verdicts — is in.
   const ordered = DATA.results.slice().sort((a, b) =>
@@ -709,7 +712,7 @@ function finalize(opts) {
     const banner = document.createElement("div");
     banner.className = "panel tone-warn banner partial-banner";
     banner.textContent = partialMessage(opts);
-    $("screen-results").prepend(banner);
+    $("banners").append(banner);
     ensureResultsVisible();
   }
   $("downloads").style.display = (DATA.results.length || (DATA.orphans || []).length) ? "flex" : "none";

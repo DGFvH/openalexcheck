@@ -122,6 +122,8 @@ def test_error_midway_keeps_partial_results_and_exports(browser, base_url, monke
     page = browser.new_page()
     _run(page, base_url)
     assert page.is_visible(".partial-banner")
+    assert page.evaluate("document.querySelector('.partial-banner')"
+                         ".compareDocumentPosition(document.getElementById('screen-results')) & 4")
     assert page.evaluate("getComputedStyle(document.getElementById('downloads')).display") == "flex"
     assert "Checking…" not in page.inner_text("#screen-results")
     assert "rejected the API key" in page.inner_text("#error")
@@ -189,6 +191,10 @@ def test_password_gate_in_browser(browser, base_url):
                           ".map(s => s.querySelectorAll('.chip:not(.soft)').length)")
     assert solid == [1] * 5, solid
     assert "🧪" not in page.inner_text(".sample-banner")
+    # The banner introduces the sample, so it must precede the orphan card.
+    assert page.evaluate("!!document.querySelector('#banners .sample-banner')")
+    assert page.evaluate("document.querySelector('.sample-banner')"
+                         ".compareDocumentPosition(document.querySelector('#orphans .ref')) & 4")
     # Field table: matching rows carry no chip, only differing fields do.
     page.evaluate("document.querySelectorAll('#screen-results details').forEach(d => d.open = true)")
     assert page.evaluate("document.querySelectorAll('#screen-results .table td.status-plain').length") > 10
